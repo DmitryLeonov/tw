@@ -3,11 +3,13 @@ package game
 import "time"
 
 type Config struct {
-	MaxPlayers  int
-	MaxTurns    int
-	TurnTimeout time.Duration
-	Width       int
-	Height      int
+	MaxPlayers    int
+	MaxTurns      int
+	TurnTimeout   time.Duration
+	Width         int
+	Height        int
+	MarkRate      int
+	MarkThreshold int
 }
 
 type Player struct {

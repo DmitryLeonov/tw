@@ -379,9 +379,15 @@ func (rm *RoundManager) printResults() {
 		if p.Eliminated {
 			alive = "no"
 		}
-		mark := p.Territory / 10
-		if mark > 5 {
-			mark = 5
+		mark := p.Territory
+		if rm.engine.Config().MarkRate > 0 {
+			mark = p.Territory / rm.engine.Config().MarkRate
+		}
+		if mark > rm.engine.Config().MarkThreshold {
+			mark = rm.engine.Config().MarkThreshold
+		}
+		if mark < 0 {
+			mark = 0
 		}
 		sb.WriteString(fmt.Sprintf("%-20s %-8d %-8d %-8d %-10s\n", p.Name, p.Territory, p.Score, mark, alive))
 	}

@@ -7,6 +7,8 @@
   "turn_timeout": "5s",
   "registration_delay": "1m",
   "results_dir": "results",
+  "mark_rate": 10,
+  "mark_threshold": 5,
   "bots": {
     "enabled": true,
     "default_strategy": "random",

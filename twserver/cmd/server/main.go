@@ -56,22 +56,26 @@ func main() {
 		}
 
 		engine = game.NewEngine(game.Config{
-			MaxPlayers:  cfg.MaxPlayers,
-			MaxTurns:    cfg.MaxTurns,
-			TurnTimeout: turnTimeout,
-			Width:       cfg.Width,
-			Height:      cfg.Height,
+			MaxPlayers:    cfg.MaxPlayers,
+			MaxTurns:      cfg.MaxTurns,
+			TurnTimeout:   turnTimeout,
+			Width:         cfg.Width,
+			Height:        cfg.Height,
+			MarkRate:      cfg.MarkRate,
+			MarkThreshold: cfg.MarkThreshold,
 		})
 
 		srv = server.NewWithConfig(cfg)
 	} else {
 		// Use default config (no bots).
 		engine = game.NewEngine(game.Config{
-			MaxPlayers:  players,
-			MaxTurns:    maxTurns,
-			TurnTimeout: turnTimeout,
-			Width:       40,
-			Height:      40,
+			MaxPlayers:    players,
+			MaxTurns:      maxTurns,
+			TurnTimeout:   turnTimeout,
+			Width:         40,
+			Height:        40,
+			MarkRate:      10,
+			MarkThreshold: 5,
 		})
 		srv = server.New(engine)
 	}

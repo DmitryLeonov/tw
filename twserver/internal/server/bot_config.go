@@ -46,6 +46,8 @@ type GameConfig struct {
 	TurnTimeout       string    `json:"turn_timeout"`
 	RegistrationDelay string    `json:"registration_delay"`
 	ResultsDir        string    `json:"results_dir"`
+	MarkRate          int       `json:"mark_rate"`
+	MarkThreshold     int       `json:"mark_threshold"`
 	Bots              BotConfig `json:"bots"`
 }
 
@@ -92,6 +94,12 @@ func LoadConfig(path string) (*GameConfig, error) {
 	}
 	if cfg.Bots.TurnDelay == "" {
 		cfg.Bots.TurnDelay = "5s"
+	}
+	if cfg.MarkRate <= 0 {
+		cfg.MarkRate = 10
+	}
+	if cfg.MarkThreshold <= 0 {
+		cfg.MarkThreshold = 5
 	}
 	return &cfg, nil
 }
