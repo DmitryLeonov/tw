@@ -54,6 +54,8 @@ type PublicPlayer struct {
 	X          int    `json:"x"`
 	Y          int    `json:"y"`
 	Score      int    `json:"score"`
+	Energy     int    `json:"energy"`
+	Territory  int    `json:"territory"`
 	Connected  bool   `json:"connected"`
 	Eliminated bool   `json:"eliminated"`
 }

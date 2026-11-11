@@ -138,6 +138,8 @@ func (v *Viewer) buildViewerState() map[string]interface{} {
 			"x":          p.X,
 			"y":          p.Y,
 			"score":      p.Score,
+			"energy":     p.Energy,
+			"territory":  p.Territory,
 			"connected":  p.Connected,
 			"eliminated": p.Eliminated,
 			"is_bot":     botIDs[p.ID],

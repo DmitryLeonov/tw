@@ -447,7 +447,7 @@
         <td>${p.score}</td>
         <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
         <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
-        <td>—</td>
+        <td>${p.territory || 0}</td>
         <td>${p.energy || 0}</td>
         <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
       `;
@@ -654,7 +654,7 @@
           <td>${p.score}</td>
           <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
           <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
-          <td>—</td>
+          <td>${p.territory || 0}</td>
           <td>${p.energy || 0}</td>
           <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
         `;

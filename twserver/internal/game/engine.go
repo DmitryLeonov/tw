@@ -439,9 +439,20 @@ func (e *Engine) fortifyTargets(playerID string) []Point {
 func (e *Engine) Leaderboard() []PublicPlayer {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	// Count territory per player.
+	territory := make(map[string]int, len(e.players))
+	for _, c := range e.cells {
+		if c.Owner != "" {
+			territory[c.Owner]++
+		}
+	}
 	out := make([]PublicPlayer, 0, len(e.players))
 	for _, p := range e.players {
-		out = append(out, PublicPlayer{ID: p.ID, Name: p.Name, X: p.X, Y: p.Y, Score: p.Score, Connected: p.Connected, Eliminated: p.Eliminated})
+		out = append(out, PublicPlayer{
+			ID: p.ID, Name: p.Name, X: p.X, Y: p.Y, Score: p.Score,
+			Energy: p.Energy, Territory: territory[p.ID],
+			Connected: p.Connected, Eliminated: p.Eliminated,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })
 	return out
