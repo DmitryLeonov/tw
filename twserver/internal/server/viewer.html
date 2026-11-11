@@ -267,9 +267,9 @@
             <thead>
               <tr>
                 <th data-sort="territory">Territory ↓</th>
-                <th data-sort="score">Score</th>
                 <th data-sort="name">Name</th>
                 <th>Type</th>
+                <th data-sort="score">Score</th>
                 <th data-sort="energy">Energy</th>
                 <th>Status</th>
               </tr>
@@ -445,9 +445,9 @@
       const isBot = botIds.has(p.id);
       tr.innerHTML = `
         <td>${p.territory || 0}</td>
-        <td>${p.score}</td>
         <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
         <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
+        <td>${p.score}</td>
         <td>${p.energy || 0}</td>
         <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
       `;
@@ -664,9 +664,9 @@
         const isBot = botIds.has(p.id);
         tr.innerHTML = `
           <td>${p.territory || 0}</td>
-          <td>${p.score}</td>
           <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
           <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
+          <td>${p.score}</td>
           <td>${p.energy || 0}</td>
           <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
         `;
