@@ -36,6 +36,7 @@ func main() {
 			log.Fatalf("Failed to load config: %v", err)
 		}
 		log.Printf("Loaded config from %s", *configPath)
+		log.Printf("MarkRate=%d MarkThreshold=%d", cfg.MarkRate, cfg.MarkThreshold)
 
 		// Override with env vars if set.
 		if p := env("PORT", ""); p != "" {
@@ -65,7 +66,7 @@ func main() {
 			MarkThreshold: cfg.MarkThreshold,
 		})
 
-		srv = server.NewWithConfig(cfg)
+		srv = server.NewWithConfig(engine, cfg)
 	} else {
 		// Use default config (no bots).
 		engine = game.NewEngine(game.Config{

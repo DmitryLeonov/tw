@@ -45,7 +45,7 @@ func New(e *game.Engine) *Server {
 }
 
 // NewWithConfig creates a Server with full configuration, including bot setup.
-func NewWithConfig(cfg *GameConfig) *Server {
+func NewWithConfig(e *game.Engine, cfg *GameConfig) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	turnTimeout := time.Duration(intEnvDefault("TURN_TIMEOUT_SECONDS", 15)) * time.Second
@@ -68,26 +68,18 @@ func NewWithConfig(cfg *GameConfig) *Server {
 		}
 	}
 
-	engine := game.NewEngine(game.Config{
-		MaxPlayers:  cfg.MaxPlayers,
-		MaxTurns:    cfg.MaxTurns,
-		TurnTimeout: turnTimeout,
-		Width:       cfg.Width,
-		Height:      cfg.Height,
-	})
-
 	gameStarted := make(chan struct{})
-	rm := NewRoundManager(engine, gameStarted)
+	rm := NewRoundManager(e, gameStarted)
 	resultsDir := "results"
 	if rd := cfg.ResultsDir; rd != "" {
 		resultsDir = rd
 	}
 	rm.SetResultsDir(resultsDir)
-	bm := NewBotManager(engine, rm, turnDelay)
-	v := NewViewer(engine, bm)
+	bm := NewBotManager(e, rm, turnDelay)
+	v := NewViewer(e, bm)
 
 	s := &Server{
-		engine:         engine,
+		engine:         e,
 		rounds:         rm,
 		botManager:     bm,
 		viewer:         v,
@@ -113,7 +105,7 @@ func NewWithConfig(cfg *GameConfig) *Server {
 			}
 			var registered []botReg
 			for _, agent := range agents {
-				player, err := engine.Join(agent.Name())
+				player, err := e.Join(agent.Name())
 				if err != nil {
 					log.Printf("Warning: failed to register bot %s: %v", agent.Name(), err)
 					continue
@@ -129,7 +121,7 @@ func NewWithConfig(cfg *GameConfig) *Server {
 			// Then start bot decision loops.
 			for _, br := range registered {
 				go func(agent PlayerAgent, pid string) {
-					bp := newBotPlayer(agent, pid, rm, engine, turnTimeout, bm.logger, turnDelay)
+					bp := newBotPlayer(agent, pid, rm, e, turnTimeout, bm.logger, turnDelay)
 					bp.Run(ctx)
 				}(br.agent, br.pid)
 			}

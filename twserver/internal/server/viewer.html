@@ -651,7 +651,7 @@
 
   // --- Sort ---
   let sortKey = 'territory';
-  let sortDir = {};
+  let sortDir = { territory: true };
   // Store base header texts (without arrows) for stable arrow updates.
   const headerBaseTexts = {};
   document.querySelectorAll('#players-table th[data-sort]').forEach(th => {

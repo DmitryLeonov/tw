@@ -13,8 +13,7 @@ public class GameLoop
 {
     private readonly GameApiClient _apiClient;
     private readonly IGameStrategy _strategy;
-    private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(2);
-    private readonly Stopwatch _turnTimer = new();
+    private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(0.5);
 
     public GameLoop(GameApiClient apiClient, IGameStrategy strategy)
     {
@@ -66,8 +65,19 @@ public class GameLoop
                     Console.WriteLine("[GAME] Strategy chose to pass.");
                 }
 
-                // Brief pause before next observation
-                await Task.Delay(_pollInterval, ct);
+                // Wait for turn resolution by polling observations.
+                // Only proceed to the next turn once the turn number changes.
+                int currentTurn = observation.Turn;
+                while (observation.Turn == currentTurn && !observation.GameOver)
+                {
+                    await Task.Delay(_pollInterval, ct);
+                    observation = await _apiClient.GetObservationAsync(ct);
+                    if (observation.Turn != currentTurn)
+                    {
+                        Console.WriteLine(
+                            $"[GAME] Turn resolved: {currentTurn} → {observation.Turn} | Score: {observation.Score}");
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
