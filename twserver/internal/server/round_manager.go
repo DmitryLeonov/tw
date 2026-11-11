@@ -369,7 +369,7 @@ func (rm *RoundManager) printResults() {
 
 	// Second table sorted by name.
 	sb.WriteString("\n=== Results by Name ===\n")
-	sb.WriteString(fmt.Sprintf("%-20s %-8s %-8s %-8s %-10s\n", "Name", "Territory", "Score", "Energy", "Alive"))
+	sb.WriteString(fmt.Sprintf("%-20s %-8s %-8s %-8s %-10s\n", "Name", "Territory", "Score", "Mark", "Alive"))
 	sb.WriteString(strings.Repeat("-", 55) + "\n")
 	names := make([]game.PublicPlayer, len(lb))
 	copy(names, lb)
@@ -379,7 +379,11 @@ func (rm *RoundManager) printResults() {
 		if p.Eliminated {
 			alive = "no"
 		}
-		sb.WriteString(fmt.Sprintf("%-20s %-8d %-8d %-8d %-10s\n", p.Name, p.Territory, p.Score, p.Energy, alive))
+		mark := p.Territory / 10
+		if mark > 5 {
+			mark = 5
+		}
+		sb.WriteString(fmt.Sprintf("%-20s %-8d %-8d %-8d %-10s\n", p.Name, p.Territory, p.Score, mark, alive))
 	}
 	sb.WriteString("\n")
 	text := sb.String()
