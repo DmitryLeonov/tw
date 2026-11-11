@@ -98,7 +98,7 @@ func (rm *RoundManager) Connect(conn *websocket.Conn, playerID string) chan game
 	rm.mu.Lock()
 
 	// Invalidate old connection if one exists (reconnect).
-	if old := rm.clients[playerID]; old != nil {
+	if old := rm.clients[playerID]; old != nil && !old.closed {
 		old.closed = true
 		// Close the old outbound channel so its writer goroutine exits.
 		close(old.outbound)
