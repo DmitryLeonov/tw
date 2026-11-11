@@ -94,17 +94,17 @@ Message: {"type": "ACTION", "turn": 0, "actions": [{"type": "expand", "target": 
 
 ### Python Client
 
-**Требования:** Python 3.11+, pip
+**Требования:** Python 3.12+, [uv](https://github.com/astral-sh/uv)
 
 ```bash
 cd twclients/python
-pip install -r requirements.txt
-python main.py --server http://localhost:8080 --name "MyBot"
+uv sync
+uv run python main.py --name PythonClient --config config.json
 ```
 
-Или с конфигурационным файлом:
+Или с аргументами командной строки:
 ```bash
-python main.py --config config.json
+uv run python main.py --server http://localhost:8080 --name "MyBot" --strategy aggressive
 ```
 
 ### C# Client
