@@ -540,8 +540,6 @@
     eventSource.addEventListener('state', function(e) {
       const data = JSON.parse(e.data);
       gameState = data;
-      playerColors = {};
-      colorIndex = 0;
       render();
       statusDot.className = 'connected';
       statusText.textContent = 'Live';
