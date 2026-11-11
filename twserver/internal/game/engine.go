@@ -454,7 +454,12 @@ func (e *Engine) Leaderboard() []PublicPlayer {
 			Connected: p.Connected, Eliminated: p.Eliminated,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Territory != out[j].Territory {
+			return out[i].Territory > out[j].Territory
+		}
+		return out[i].Score > out[j].Score
+	})
 	return out
 }
 

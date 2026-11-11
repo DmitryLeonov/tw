@@ -356,18 +356,14 @@ func (rm *RoundManager) printResults() {
 
 	var sb strings.Builder
 	sb.WriteString("\n=== Game Results ===\n")
-	sb.WriteString(fmt.Sprintf("%-4s %-20s %-8s %-8s %-10s\n", "Rank", "Name", "Score", "Alive", "Connected"))
+	sb.WriteString(fmt.Sprintf("%-4s %-20s %-8s %-8s %-10s\n", "Rank", "Name", "Territory", "Score", "Alive"))
 	sb.WriteString(strings.Repeat("-", 55) + "\n")
 	for i, p := range lb {
 		alive := "yes"
 		if p.Eliminated {
 			alive = "no"
 		}
-		conn := "yes"
-		if !p.Connected {
-			conn = "no"
-		}
-		sb.WriteString(fmt.Sprintf("%-4d %-20s %-8d %-8s %-10s\n", i+1, p.Name, p.Score, alive, conn))
+		sb.WriteString(fmt.Sprintf("%-4d %-20s %-8d %-8d %-10s\n", i+1, p.Name, p.Territory, p.Score, alive))
 	}
 	sb.WriteString("\n")
 	text := sb.String()

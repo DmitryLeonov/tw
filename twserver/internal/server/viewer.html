@@ -266,10 +266,10 @@
           <table id="players-table">
             <thead>
               <tr>
-                <th data-sort="score">Score ↓</th>
-                <th>Name</th>
+                <th data-sort="territory">Territory ↓</th>
+                <th data-sort="score">Score</th>
+                <th data-sort="name">Name</th>
                 <th>Type</th>
-                <th data-sort="territory">Territory</th>
                 <th data-sort="energy">Energy</th>
                 <th>Status</th>
               </tr>
@@ -437,17 +437,17 @@
     const botIds = new Set((gameState.bot_players || []).map(p => p.id));
     playersBody.innerHTML = '';
 
-    // Sort by score descending
-    const sorted = [...players].sort((a, b) => b.score - a.score);
+    // Sort by territory descending
+    const sorted = [...players].sort((a, b) => b.territory - a.territory || b.score - a.score);
     for (const p of sorted) {
       const tr = document.createElement('tr');
       const color = getPlayerColor(p.id);
       const isBot = botIds.has(p.id);
       tr.innerHTML = `
+        <td>${p.territory || 0}</td>
         <td>${p.score}</td>
         <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
         <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
-        <td>${p.territory || 0}</td>
         <td>${p.energy || 0}</td>
         <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
       `;
@@ -632,15 +632,27 @@
   });
 
   // --- Sort ---
+  let sortKey = 'territory';
   let sortDir = {};
+  function updateArrows() {
+    document.querySelectorAll('#players-table th[data-sort]').forEach(th => {
+      const k = th.dataset.sort;
+      const asc = sortDir[k];
+      th.textContent = k === sortKey ? (asc ? `${th.textContent.replace(/[↑↓]$/, '')} ↑` : `${th.textContent.replace(/[↑↓]$/, '')} ↓`) : th.textContent.replace(/[↑↓]$/, '');
+    });
+  }
   document.querySelectorAll('#players-table th[data-sort]').forEach(th => {
     th.addEventListener('click', function() {
       const key = this.dataset.sort;
       sortDir[key] = !sortDir[key];
+      sortKey = key;
       if (!gameState) return;
       const players = [...gameState.players].sort((a, b) => {
         let va = a[key] || 0;
         let vb = b[key] || 0;
+        if (key === 'name') {
+          return sortDir[key] ? vb.localeCompare(va) : va.localeCompare(vb);
+        }
         return sortDir[key] ? vb - va : va - vb;
       });
       // Re-render table with sorted players
@@ -651,15 +663,16 @@
         const color = getPlayerColor(p.id);
         const isBot = botIds.has(p.id);
         tr.innerHTML = `
+          <td>${p.territory || 0}</td>
           <td>${p.score}</td>
           <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
           <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
-          <td>${p.territory || 0}</td>
           <td>${p.energy || 0}</td>
           <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
         `;
         playersBody.appendChild(tr);
       }
+      updateArrows();
     });
   });
 
