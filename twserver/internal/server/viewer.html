@@ -437,8 +437,15 @@
     const botIds = new Set((gameState.bot_players || []).map(p => p.id));
     playersBody.innerHTML = '';
 
-    // Sort by territory descending
-    const sorted = [...players].sort((a, b) => b.territory - a.territory || b.score - a.score);
+    // Sort by current sortKey/sortDir
+    const sorted = [...players].sort((a, b) => {
+      let va = a[sortKey] || 0;
+      let vb = b[sortKey] || 0;
+      if (sortKey === 'name') {
+        return sortDir[sortKey] ? vb.localeCompare(va) : va.localeCompare(vb);
+      }
+      return sortDir[sortKey] ? vb - va : va - vb;
+    });
     for (const p of sorted) {
       const tr = document.createElement('tr');
       const color = getPlayerColor(p.id);
@@ -503,6 +510,7 @@
   function render() {
     updateMatchInfo();
     updatePlayersTable();
+    updateArrows();
     updateHistory();
     resizeCanvas();
   }
@@ -634,11 +642,20 @@
   // --- Sort ---
   let sortKey = 'territory';
   let sortDir = {};
+  // Store base header texts (without arrows) for stable arrow updates.
+  const headerBaseTexts = {};
+  document.querySelectorAll('#players-table th[data-sort]').forEach(th => {
+    headerBaseTexts[th.dataset.sort] = th.textContent.replace(/[↑↓]$/, '').trim();
+  });
   function updateArrows() {
     document.querySelectorAll('#players-table th[data-sort]').forEach(th => {
       const k = th.dataset.sort;
       const asc = sortDir[k];
-      th.textContent = k === sortKey ? (asc ? `${th.textContent.replace(/[↑↓]$/, '')} ↑` : `${th.textContent.replace(/[↑↓]$/, '')} ↓`) : th.textContent.replace(/[↑↓]$/, '');
+      if (k === sortKey) {
+        th.textContent = headerBaseTexts[k] + (asc ? ' ↑' : ' ↓');
+      } else {
+        th.textContent = headerBaseTexts[k];
+      }
     });
   }
   document.querySelectorAll('#players-table th[data-sort]').forEach(th => {

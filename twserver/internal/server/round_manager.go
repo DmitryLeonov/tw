@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -364,6 +365,21 @@ func (rm *RoundManager) printResults() {
 			alive = "no"
 		}
 		sb.WriteString(fmt.Sprintf("%-4d %-20s %-8d %-8d %-10s\n", i+1, p.Name, p.Territory, p.Score, alive))
+	}
+
+	// Second table sorted by name.
+	sb.WriteString("\n=== Results by Name ===\n")
+	sb.WriteString(fmt.Sprintf("%-20s %-8s %-8s %-8s %-10s\n", "Name", "Territory", "Score", "Energy", "Alive"))
+	sb.WriteString(strings.Repeat("-", 55) + "\n")
+	names := make([]game.PublicPlayer, len(lb))
+	copy(names, lb)
+	sort.Slice(names, func(i, j int) bool { return names[i].Name < names[j].Name })
+	for _, p := range names {
+		alive := "yes"
+		if p.Eliminated {
+			alive = "no"
+		}
+		sb.WriteString(fmt.Sprintf("%-20s %-8d %-8d %-8d %-10s\n", p.Name, p.Territory, p.Score, p.Energy, alive))
 	}
 	sb.WriteString("\n")
 	text := sb.String()
