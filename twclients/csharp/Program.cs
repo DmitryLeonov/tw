@@ -9,7 +9,7 @@ using TerritoryWars.Strategy;
 
 // Parse command-line arguments
 var commandArgs = Environment.GetCommandLineArgs();
-var configPath = "appsettings.json";
+var configPath = "config.json";
 string? serverUrl = null;
 string? playerName = null;
 string strategyName = "Simple";

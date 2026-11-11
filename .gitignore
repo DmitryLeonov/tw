@@ -33,7 +33,7 @@ Thumbs.db
 results/
 
 # Local config overrides
-appsettings.json
+config.local.json
 server_nobots.json
 .env
 

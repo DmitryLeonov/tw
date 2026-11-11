@@ -62,7 +62,7 @@ dotnet run
 dotnet run -- --server http://localhost:8080 --name MyBot
 
 # Use a specific config file
-dotnet run -- --config appsettings.json
+dotnet run -- --config config.json
 
 # Specify strategy
 dotnet run -- --strategy Simple
@@ -86,10 +86,10 @@ dotnet run -- --server http://localhost:8080 --name TerritoryBot
 
 1. Copy the example config:
    ```bash
-   cp appsettings.example.json appsettings.json
+   # config.json уже содержит пример конфигурации
    ```
 
-2. Edit `appsettings.json` with your settings:
+2. Отредактируйте `config.json` с вашими настройками:
    ```json
    {
      "ServerUrl": "http://game-server.example.com:8080",
@@ -100,9 +100,9 @@ dotnet run -- --server http://localhost:8080 --name TerritoryBot
    }
    ```
 
-3. Run:
+3. Запуск:
    ```bash
-   dotnet run -- --config appsettings.json
+   dotnet run -- --config config.json
    ```
 
 ### Command-Line Arguments
@@ -111,12 +111,12 @@ dotnet run -- --server http://localhost:8080 --name TerritoryBot
 |------------|------------------------------------|----------------------|
 | `--server` | Game server HTTP URL               | From config file     |
 | `--name`   | Player name for registration       | From config file     |
-| `--config` | Path to JSON config file           | `appsettings.json`   |
+| `--config` | Путь к JSON файлу конфигурации     | `config.json`        |
 | `--strategy`| Strategy implementation to use   | `Simple`             |
 
 ## Configuration
 
-### appsettings.json
+### config.json
 
 | Key                  | Type    | Description                          | Default          |
 |----------------------|---------|--------------------------------------|------------------|
@@ -306,8 +306,7 @@ Test Run Failed
 twclients/csharp/
 ├── TerritoryWars.Client.csproj
 ├── README.md
-├── appsettings.example.json
-├── appsettings.json              # Your config (gitignored)
+├── config.json
 ├── Program.cs                    # Entry point
 ├── Api/
 │   └── GameApiClient.cs          # HTTP + WebSocket client

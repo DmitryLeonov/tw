@@ -119,7 +119,7 @@ dotnet run -- --server http://localhost:8080 --name "MyBot"
 
 Или с конфигурационным файлом:
 ```bash
-dotnet run -- --config appsettings.json
+dotnet run -- --config config.json
 ```
 
 ### Go Client
@@ -272,7 +272,7 @@ twclients/
 ├── csharp/
 │   ├── README.md
 │   ├── TerritoryWars.Client.csproj
-│   ├── appsettings.example.json
+│   ├── config.json
 │   ├── Program.cs
 │   ├── Models/
 │   ├── Api/

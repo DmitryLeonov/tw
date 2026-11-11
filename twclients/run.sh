@@ -122,9 +122,9 @@ if [ "$MODE" != "bots" ]; then
     if command -v dotnet > /dev/null 2>&1; then
       echo "=== Starting C# client ==="
       cd "$SCRIPT_DIR/csharp"
-      cp appsettings.example.json appsettings.json 2>/dev/null || true
+      cp config.json config.local.json 2>/dev/null || true
       dotnet run --project . -- \
-        --config appsettings.example.json \
+        --config config.json \
         --name CSharpClient \
         --strategy simple \
         > /tmp/csharp_client.log 2>&1 &
