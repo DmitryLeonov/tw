@@ -134,7 +134,7 @@ func (v *Viewer) buildViewerState() map[string]interface{} {
 	for _, p := range leaderboard {
 		entry := map[string]interface{}{
 			"id":         p.ID,
-			"name":       p.ID,
+			"name":       p.Name,
 			"x":          p.X,
 			"y":          p.Y,
 			"score":      p.Score,
