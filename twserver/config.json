@@ -4,7 +4,7 @@
   "max_turns": 200,
   "width": 40,
   "height": 40,
-  "turn_timeout": "15s",
+  "turn_timeout": "5s",
   "registration_delay": "1m",
   "results_dir": "results",
   "bots": {
