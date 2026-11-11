@@ -2,6 +2,8 @@
 bin/
 **/bin/
 **/bin
+**/client
+**/server
 
 # Build artifacts
 **/obj/
@@ -33,3 +35,7 @@ results/
 # Local config overrides
 appsettings.json
 server_nobots.json
+.env
+
+# Dist
+dist/
