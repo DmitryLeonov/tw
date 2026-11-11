@@ -8,7 +8,7 @@
 
 - Подключается к серверу по HTTP API и WebSocket
 - Регистрирует игрока и получает токен сессии
-- Получает наблюдения (Observation) о текущем состоянии игры
+- Получает состояние игры (Observation)
 - Отправляет действия (Actions) через WebSocket
 - Работает автономно до завершения матча
 
@@ -39,7 +39,7 @@ Content-Type: application/json
 Response: {"player_id": "p01", "token": "...", "websocket_url": "/ws"}
 ```
 
-### Получение наблюдения
+### Получение состояния игры
 ```
 GET /api/v1/state
 Authorization: Bearer TOKEN
@@ -62,7 +62,7 @@ ws://localhost:8080/ws?token=YOUR_TOKEN
 Message: {"type": "ACTION", "turn": 0, "actions": [{"type": "expand", "target": {"x": 20, "y": 4}}]}
 ```
 
-### Observation (наблюдение)
+### Observation (состояние игры)
 ```json
 {
   "match_id": "string",
@@ -97,7 +97,7 @@ Message: {"type": "ACTION", "turn": 0, "actions": [{"type": "expand", "target": 
 **Требования:** Python 3.11+, pip
 
 ```bash
-cd twtwclients/python
+cd twclients/python
 pip install -r requirements.txt
 python main.py --server http://localhost:8080 --name "MyBot"
 ```
@@ -112,7 +112,7 @@ python main.py --config config.json
 **Требования:** .NET 8 SDK
 
 ```bash
-cd twtwclients/csharp
+cd twclients/csharp
 dotnet restore
 dotnet run -- --server http://localhost:8080 --name "MyBot"
 ```
@@ -127,7 +127,7 @@ dotnet run -- --config config.json
 **Требования:** Go 1.22+
 
 ```bash
-cd twtwclients/golang
+cd twclients/golang
 go mod tidy
 go run ./cmd/client --server http://localhost:8080 --name "MyBot"
 ```
@@ -166,7 +166,7 @@ class MyStrategy(IGameStrategy):
 ### C#
 
 ```csharp
-using TerritoryWars.Client.Strategy;
+using TerritoryWars.Strategy;
 
 public class MyStrategy : IGameStrategy
 {
@@ -183,7 +183,7 @@ public class MyStrategy : IGameStrategy
 ```go
 package strategy
 
-import "territory-wars-client/internal/models"
+import "twclient/internal/models"
 
 type MyStrategy struct{}
 
@@ -235,19 +235,19 @@ cd twserver
 go run ./cmd/server
 
 # Терминал 2: Python клиент
-cd twtwclients/python
+cd twclients/python
 python main.py --server http://localhost:8080 --name "PythonBot"
 
 # Терминал 3: C# клиент
-cd twtwclients/csharp
+cd twclients/csharp
 dotnet run -- --server http://localhost:8080 --name "CSBot"
 
 # Терминал 4: Go клиент
-cd twtwclients/golang
+cd twclients/golang
 go run ./cmd/client --server http://localhost:8080 --name "GoBot"
 ```
 
-Все три клиента должны зарегистрироваться, получать наблюдения, отправлять действия и дождаться завершения матча.
+Все три клиента должны зарегистрироваться, получать состояние игры, отправлять действия и дождаться завершения матча.
 
 ## Структура репозитория
 

@@ -117,3 +117,36 @@ func TestLoadConfig_NegativeValues(t *testing.T) {
 		t.Errorf("expected port to default to 8080 for negative value, got %d", cfg.Port)
 	}
 }
+
+func TestLoadConfig_ResultsDirRelative(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.json")
+	if err := os.WriteFile(path, []byte(`{"results_dir": "results"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	expected := filepath.Join(tmp, "results")
+	if cfg.ResultsDir != expected {
+		t.Errorf("expected results_dir %s, got %s", expected, cfg.ResultsDir)
+	}
+}
+
+func TestLoadConfig_ResultsDirAbsolute(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.json")
+	if err := os.WriteFile(path, []byte(`{"results_dir": "/tmp/my-results"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.ResultsDir != "/tmp/my-results" {
+		t.Errorf("expected absolute path unchanged, got %s", cfg.ResultsDir)
+	}
+}

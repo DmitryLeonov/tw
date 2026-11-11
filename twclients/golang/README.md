@@ -159,7 +159,7 @@ All strategies implement this interface:
 ```go
 package strategy
 
-import "territory-wars-client/internal/models"
+import "twclient/internal/models"
 
 type Strategy interface {
     Decide(observation *models.Observation) *models.Action
@@ -176,7 +176,7 @@ package strategy
 
 import (
     "fmt"
-    "territory-wars-client/internal/models"
+    "twclient/internal/models"
 )
 
 type AggressiveStrategy struct{}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // BotStrategy defines the available bot strategies.
@@ -78,6 +79,10 @@ func LoadConfig(path string) (*GameConfig, error) {
 	}
 	if cfg.RegistrationDelay == "" {
 		cfg.RegistrationDelay = "1m"
+	}
+	// Resolve results_dir relative to the config file's directory.
+	if cfg.ResultsDir != "" && !filepath.IsAbs(cfg.ResultsDir) {
+		cfg.ResultsDir = filepath.Join(filepath.Dir(path), cfg.ResultsDir)
 	}
 	if cfg.Bots.DefaultStrategy == "" {
 		cfg.Bots.DefaultStrategy = StrategyRandom
