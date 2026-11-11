@@ -1,0 +1,12 @@
+[project]
+name = "twclient"
+version = "1.0.0"
+description = "Territory Wars Python client"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27.0",
+    "websockets>=12.0",
+]
+
+[project.scripts]
+tw-python = "main:main"

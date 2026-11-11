@@ -1,0 +1,35 @@
+# Binaries
+bin/
+**/bin/
+**/bin
+
+# Build artifacts
+**/obj/
+**/obj
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+uv.lock
+
+# C#
+*.sln
+*.csproj.user
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/tmp/
+
+# Results
+results/
+
+# Local config overrides
+appsettings.json
+server_nobots.json

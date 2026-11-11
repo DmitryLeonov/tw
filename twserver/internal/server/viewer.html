@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Territory Wars — Viewer</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --panel: #16213e;
+    --border: #0f3460;
+    --text: #e0e0e0;
+    --accent: #e94560;
+    --highlight: #f5c518;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Main layout */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  #top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #top-bar h1 { font-size: 18px; color: var(--accent); }
+  #match-info { display: flex; gap: 16px; font-size: 13px; }
+  #match-info span { color: #aaa; }
+  #match-info strong { color: var(--highlight); }
+
+  #content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Map area */
+  #map-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: #0a0a1a;
+  }
+  #map-canvas {
+    image-rendering: pixelated;
+    cursor: crosshair;
+  }
+
+  /* Cell info overlay */
+  #cell-info {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(22, 33, 62, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    pointer-events: none;
+    min-width: 180px;
+  }
+  #cell-info div { margin: 2px 0; }
+  #cell-info .label { color: #888; }
+
+  /* Legend */
+  #legend {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(22, 33, 62, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+  #legend h3 { margin-bottom: 6px; color: var(--highlight); font-size: 12px; }
+  #legend .player-color {
+    display: flex; align-items: center; gap: 6px; margin: 2px 0;
+  }
+  #legend .swatch {
+    width: 14px; height: 14px; border-radius: 2px; border: 1px solid #555;
+  }
+
+  /* Zoom controls */
+  #zoom-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  #zoom-controls button {
+    width: 32px; height: 32px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 18px;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  #zoom-controls button:hover { background: var(--border); }
+
+  /* Sidebar */
+  #sidebar {
+    width: 320px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  #sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  #sidebar-tabs button {
+    flex: 1;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 2px solid transparent;
+  }
+  #sidebar-tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  #sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Player table */
+  #players-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  #players-table th {
+    text-align: left;
+    padding: 4px 6px;
+    background: var(--bg);
+    color: #888;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  #players-table th:hover { color: var(--text); }
+  #players-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+  }
+  #players-table tr:hover td { background: rgba(233, 69, 96, 0.08); }
+  .player-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+  }
+  .badge-bot { background: #4a148c; color: #e1bee7; }
+  .badge-human { background: #1b5e20; color: #c8e6c9; }
+
+  /* History */
+  #history-list { list-style: none; }
+  #history-list li {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  #history-list li:hover { background: rgba(233, 69, 96, 0.08); }
+  #history-list li.selected { background: rgba(233, 69, 96, 0.15); }
+  #history-detail {
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    font-size: 11px;
+    display: none;
+  }
+  #history-detail.show { display: block; }
+
+  /* Status indicator */
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+  #status-dot.connected { background: #4caf50; }
+  #status-dot.disconnected { background: #f44336; }
+  #status-dot.stale { background: #ff9800; }
+</style>
+</head>
+<body>
+
+<div id="main">
+  <div id="top-bar">
+    <h1>Territory Wars</h1>
+    <div id="match-info">
+      <span>Turn: <strong id="turn-num">—</strong></span>
+      <span>Players: <strong id="player-count">—</strong></span>
+      <span>Bots: <strong id="bot-count">—</strong></span>
+      <span>Status: <strong id="game-status">—</strong></span>
+      <span id="status-indicator"><span id="status-dot" class="disconnected"></span><span id="status-text">Connecting...</span></span>
+    </div>
+  </div>
+  <div id="content">
+    <div id="map-area">
+      <canvas id="map-canvas"></canvas>
+      <div id="cell-info">
+        <div><span class="label">Position:</span> <span id="ci-pos">—</span></div>
+        <div><span class="label">Owner:</span> <span id="ci-owner">—</span></div>
+        <div><span class="label">Type:</span> <span id="ci-type">—</span></div>
+        <div><span class="label">Health:</span> <span id="ci-health">—</span></div>
+      </div>
+      <div id="legend"><h3>Players</h3><div id="legend-players"></div></div>
+      <div id="zoom-controls">
+        <button id="zoom-in" title="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out">−</button>
+        <button id="zoom-reset" title="Reset view">⌂</button>
+      </div>
+    </div>
+    <div id="sidebar">
+      <div id="sidebar-tabs">
+        <button class="active" data-tab="players">Players</button>
+        <button data-tab="history">History</button>
+      </div>
+      <div id="sidebar-content">
+        <div class="tab-panel active" id="tab-players">
+          <table id="players-table">
+            <thead>
+              <tr>
+                <th data-sort="score">Score ↓</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th data-sort="territory">Territory</th>
+                <th data-sort="energy">Energy</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="players-body"></tbody>
+          </table>
+        </div>
+        <div class="tab-panel" id="tab-history">
+          <ul id="history-list"></ul>
+          <div id="history-detail"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- Configuration ---
+  const CELL_SIZE = 14;
+  const PLAYER_COLORS = [
+    '#e94560', '#00bcd4', '#4caf50', '#ff9800', '#9c27b0',
+    '#f44336', '#2196f3', '#8bc34a', '#ff5722', '#607d8b',
+    '#795548', '#3f51b5', '#009688', '#e91e63', '#ffc107',
+    '#673ab7', '#03a9f4', '#4dd0e1', '#d4e157', '#ff7043'
+  ];
+
+  // --- State ---
+  let gameState = null;
+  let historyEntries = [];
+  let playerColors = {};
+  let colorIndex = 0;
+  let zoom = 1;
+  let panX = 0, panY = 0;
+  let isDragging = false;
+  let dragStartX, dragStartY, panStartX, panStartY;
+  let hoveredCell = null;
+  let selectedTurn = null;
+  let eventSource = null;
+
+  // --- DOM refs ---
+  const canvas = document.getElementById('map-canvas');
+  const ctx = canvas.getContext('2d');
+  const turnNumEl = document.getElementById('turn-num');
+  const playerCountEl = document.getElementById('player-count');
+  const botCountEl = document.getElementById('bot-count');
+  const gameStatusEl = document.getElementById('game-status');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const ciPos = document.getElementById('ci-pos');
+  const ciOwner = document.getElementById('ci-owner');
+  const ciType = document.getElementById('ci-type');
+  const ciHealth = document.getElementById('ci-health');
+  const legendPlayers = document.getElementById('legend-players');
+  const playersBody = document.getElementById('players-body');
+  const historyList = document.getElementById('history-list');
+  const historyDetail = document.getElementById('history-detail');
+
+  // --- Helpers ---
+  function getPlayerColor(id) {
+    if (!playerColors[id]) {
+      playerColors[id] = PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
+      colorIndex++;
+    }
+    return playerColors[id];
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return d.toLocaleTimeString();
+  }
+
+  // --- Rendering ---
+  function resizeCanvas() {
+    if (!gameState) return;
+    const area = document.getElementById('map-area');
+    const w = area.clientWidth;
+    const h = area.clientHeight;
+    const mapW = gameState.width * CELL_SIZE;
+    const mapH = gameState.height * CELL_SIZE;
+    canvas.width = Math.max(mapW, w);
+    canvas.height = Math.max(mapH, h);
+    drawMap();
+  }
+
+  function drawMap() {
+    if (!gameState) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.save();
+    ctx.translate(panX, panY);
+    ctx.scale(zoom, zoom);
+
+    const cells = gameState.cells || [];
+    for (const cell of cells) {
+      const x = cell.x * CELL_SIZE;
+      const y = cell.y * CELL_SIZE;
+      const color = cell.owner ? getPlayerColor(cell.owner) : '#1a1a2e';
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+
+      // Cell border
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+
+      // Base indicator
+      if (cell.type === 'base') {
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+      }
+
+      // Resource indicator
+      if (cell.type === 'resource') {
+        ctx.fillStyle = 'rgba(245, 197, 24, 0.5)';
+        ctx.beginPath();
+        ctx.arc(x + CELL_SIZE / 2, y + CELL_SIZE / 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Health bar for owned cells
+      if (cell.owner && cell.health > 0) {
+        const barW = CELL_SIZE - 2;
+        const barH = 2;
+        const healthRatio = cell.health / 7;
+        ctx.fillStyle = `rgba(0,0,0,0.4)`;
+        ctx.fillRect(x + 1, y + CELL_SIZE - barH - 1, barW, barH);
+        ctx.fillStyle = healthRatio > 0.5 ? '#4caf50' : healthRatio > 0.25 ? '#ff9800' : '#f44336';
+        ctx.fillRect(x + 1, y + CELL_SIZE - barH - 1, barW * healthRatio, barH);
+      }
+    }
+
+    // Highlight hovered cell
+    if (hoveredCell) {
+      const hx = hoveredCell.x * CELL_SIZE;
+      const hy = hoveredCell.y * CELL_SIZE;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(hx, hy, CELL_SIZE, CELL_SIZE);
+    }
+
+    ctx.restore();
+  }
+
+  function updateMatchInfo() {
+    if (!gameState) return;
+    turnNumEl.textContent = gameState.turn;
+    playerCountEl.textContent = (gameState.players || []).length;
+    const bots = (gameState.bot_players || []).length;
+    botCountEl.textContent = bots;
+    gameStatusEl.textContent = gameState.game_over ? 'Game Over' : 'Playing';
+  }
+
+  function updatePlayersTable() {
+    if (!gameState) return;
+    const players = gameState.players || [];
+    const botIds = new Set((gameState.bot_players || []).map(p => p.id));
+    playersBody.innerHTML = '';
+
+    // Sort by score descending
+    const sorted = [...players].sort((a, b) => b.score - a.score);
+    for (const p of sorted) {
+      const tr = document.createElement('tr');
+      const color = getPlayerColor(p.id);
+      const isBot = botIds.has(p.id);
+      tr.innerHTML = `
+        <td>${p.score}</td>
+        <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
+        <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
+        <td>—</td>
+        <td>${p.energy || 0}</td>
+        <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
+      `;
+      playersBody.appendChild(tr);
+    }
+
+    // Update legend
+    legendPlayers.innerHTML = '';
+    const uniquePlayers = new Map();
+    for (const p of players) {
+      if (!uniquePlayers.has(p.id)) {
+        uniquePlayers.set(p.id, p);
+      }
+    }
+    for (const [id, p] of uniquePlayers) {
+      const color = getPlayerColor(id);
+      const isBot = botIds.has(id);
+      const div = document.createElement('div');
+      div.className = 'player-color';
+      div.innerHTML = `<span class="swatch" style="background:${color}"></span>${p.name || id} (${isBot ? 'Bot' : 'Human'})`;
+      legendPlayers.appendChild(div);
+    }
+  }
+
+  function updateHistory() {
+    const entries = gameState.history || [];
+    historyList.innerHTML = '';
+    for (const entry of entries) {
+      const li = document.createElement('li');
+      li.dataset.turn = entry.turn;
+      li.textContent = `Turn ${entry.turn}: ${entry.player_name || entry.player_id} → ${entry.action_type}`;
+      li.addEventListener('click', () => showHistoryDetail(entry));
+      historyList.appendChild(li);
+    }
+  }
+
+  function showHistoryDetail(entry) {
+    selectedTurn = entry.turn;
+    // Highlight selected
+    const items = historyList.querySelectorAll('li');
+    items.forEach(li => li.classList.toggle('selected', li.dataset.turn == entry.turn));
+
+    historyDetail.innerHTML = `
+      <div><strong>Turn:</strong> ${entry.turn}</div>
+      <div><strong>Player:</strong> ${entry.player_name || entry.player_id}</div>
+      <div><strong>Action:</strong> ${entry.action_type}</div>
+      <div><strong>Result:</strong> ${entry.accepted ? '✅ Accepted' : '❌ Rejected'}</div>
+      ${entry.reason ? `<div><strong>Reason:</strong> ${entry.reason}</div>` : ''}
+    `;
+    historyDetail.classList.add('show');
+  }
+
+  function render() {
+    updateMatchInfo();
+    updatePlayersTable();
+    updateHistory();
+    resizeCanvas();
+  }
+
+  // --- SSE Connection ---
+  function connectSSE() {
+    if (eventSource) {
+      eventSource.close();
+    }
+    statusDot.className = 'disconnected';
+    statusText.textContent = 'Connecting...';
+
+    eventSource = new EventSource('/api/v1/viewer/events');
+
+    eventSource.addEventListener('state', function(e) {
+      const data = JSON.parse(e.data);
+      gameState = data;
+      playerColors = {};
+      colorIndex = 0;
+      render();
+      statusDot.className = 'connected';
+      statusText.textContent = 'Live';
+    });
+
+    eventSource.addEventListener('history', function(e) {
+      const data = JSON.parse(e.data);
+      historyEntries = data;
+      if (gameState) {
+        gameState.history = data;
+        updateHistory();
+      }
+    });
+
+    eventSource.addEventListener('error', function() {
+      statusDot.className = 'disconnected';
+      statusText.textContent = 'Disconnected';
+    });
+
+    eventSource.addEventListener('stale', function() {
+      statusDot.className = 'stale';
+      statusText.textContent = 'Stale data';
+    });
+  }
+
+  // --- Canvas interaction ---
+  canvas.addEventListener('mousemove', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - panX) / zoom;
+    const my = (e.clientY - rect.top - panY) / zoom;
+    const cx = Math.floor(mx / CELL_SIZE);
+    const cy = Math.floor(my / CELL_SIZE);
+
+    if (!gameState) return;
+    const cell = gameState.cells.find(c => c.x === cx && c.y === cy);
+    if (cell) {
+      hoveredCell = cell;
+      ciPos.textContent = `(${cell.x}, ${cell.y})`;
+      ciOwner.textContent = cell.owner || 'None';
+      ciType.textContent = cell.type;
+      ciHealth.textContent = cell.health;
+    } else {
+      hoveredCell = null;
+      ciPos.textContent = '—';
+      ciOwner.textContent = '—';
+      ciType.textContent = '—';
+      ciHealth.textContent = '—';
+    }
+    drawMap();
+  });
+
+  canvas.addEventListener('mouseleave', function() {
+    hoveredCell = null;
+    drawMap();
+  });
+
+  // Pan
+  canvas.addEventListener('mousedown', function(e) {
+    if (e.button === 0) {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
+    }
+  });
+
+  canvas.addEventListener('mousemove', function(e) {
+    if (isDragging) {
+      panX = panStartX + (e.clientX - dragStartX);
+      panY = panStartY + (e.clientY - dragStartY);
+      drawMap();
+    }
+  });
+
+  canvas.addEventListener('mouseup', function() { isDragging = false; });
+  canvas.addEventListener('mouseleave', function() { isDragging = false; });
+
+  // Zoom
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    zoom = Math.max(0.3, Math.min(5, zoom * delta));
+    drawMap();
+  }, { passive: false });
+
+  document.getElementById('zoom-in').addEventListener('click', () => {
+    zoom = Math.min(5, zoom * 1.3);
+    drawMap();
+  });
+  document.getElementById('zoom-out').addEventListener('click', () => {
+    zoom = Math.max(0.3, zoom / 1.3);
+    drawMap();
+  });
+  document.getElementById('zoom-reset').addEventListener('click', () => {
+    zoom = 1; panX = 0; panY = 0;
+    drawMap();
+  });
+
+  // --- Tabs ---
+  document.querySelectorAll('#sidebar-tabs button').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#sidebar-tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      this.classList.add('active');
+      document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+    });
+  });
+
+  // --- Sort ---
+  let sortDir = {};
+  document.querySelectorAll('#players-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', function() {
+      const key = this.dataset.sort;
+      sortDir[key] = !sortDir[key];
+      if (!gameState) return;
+      const players = [...gameState.players].sort((a, b) => {
+        let va = a[key] || 0;
+        let vb = b[key] || 0;
+        return sortDir[key] ? vb - va : va - vb;
+      });
+      // Re-render table with sorted players
+      const botIds = new Set((gameState.bot_players || []).map(p => p.id));
+      playersBody.innerHTML = '';
+      for (const p of players) {
+        const tr = document.createElement('tr');
+        const color = getPlayerColor(p.id);
+        const isBot = botIds.has(p.id);
+        tr.innerHTML = `
+          <td>${p.score}</td>
+          <td><span class="player-dot" style="background:${color}"></span>${p.name || p.id}</td>
+          <td><span class="badge ${isBot ? 'badge-bot' : 'badge-human'}">${isBot ? 'Bot' : 'Human'}</span></td>
+          <td>—</td>
+          <td>${p.energy || 0}</td>
+          <td>${p.eliminated ? '❌' : (p.connected ? '🟢' : '🔴')}</td>
+        `;
+        playersBody.appendChild(tr);
+      }
+    });
+  });
+
+  // --- Init ---
+  window.addEventListener('resize', resizeCanvas);
+  connectSSE();
+})();
+</script>
+</body>
+</html>

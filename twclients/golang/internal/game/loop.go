@@ -1,0 +1,194 @@
+package game
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"twclient/internal/api"
+	"twclient/internal/models"
+	"twclient/internal/strategy"
+)
+
+// Loop orchestrates the game loop: connecting via WebSocket, receiving
+// observations via HTTP polling, delegating decisions to a Strategy, and
+// submitting actions via WebSocket.
+type Loop struct {
+	api      *api.Client
+	strategy strategy.Strategy
+	logger   *slog.Logger
+}
+
+// New creates a new Loop.
+func New(apiClient *api.Client, strat strategy.Strategy) *Loop {
+	return &Loop{
+		api:      apiClient,
+		strategy: strat,
+		logger:   slog.Default(),
+	}
+}
+
+// NewWithLogger creates a Loop with a custom logger.
+func NewWithLogger(apiClient *api.Client, strat strategy.Strategy, logger *slog.Logger) *Loop {
+	l := New(apiClient, strat)
+	l.logger = logger
+	return l
+}
+
+// Run executes the game loop until the game ends or the context is cancelled.
+func (l *Loop) Run(ctx context.Context) error {
+	l.logger.Info("starting game loop")
+
+	// Get initial observation.
+	obs, err := l.api.GetObservation(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get initial observation: %w", err)
+	}
+
+	l.logger.Info("initial observation received", "turn", obs.Turn, "score", obs.Score)
+
+	// Main game loop with reconnect.
+	for !obs.GameOver {
+		select {
+		case <-ctx.Done():
+			l.logger.Info("context cancelled, stopping game loop")
+			return ctx.Err()
+		default:
+		}
+
+		// Connect (or reconnect) via WebSocket.
+		conn, err := l.connectOrReconnect(ctx)
+		if err != nil {
+			l.logger.Error("failed to connect WebSocket", "error", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// Run the game loop on this connection until it breaks.
+		obs, err = l.runOnConnection(ctx, conn, obs)
+		if err != nil {
+			l.logger.Warn("connection lost, will reconnect", "error", err)
+			// Continue to reconnect on next iteration.
+			continue
+		}
+		// err == nil means game over.
+		break
+	}
+
+	// Game over — print final state.
+	l.logger.Info("game over", "final_turn", obs.Turn, "final_score", obs.Score)
+	l.printFinalState(obs)
+
+	return nil
+}
+
+// connectOrReconnect establishes or re-establishes a WebSocket connection.
+func (l *Loop) connectOrReconnect(ctx context.Context) (*websocket.Conn, error) {
+	l.logger.Info("connecting to WebSocket")
+	conn, err := l.api.ConnectWebSocket(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("WebSocket dial failed: %w", err)
+	}
+	l.logger.Info("WebSocket connected")
+	return conn, nil
+}
+
+// runOnConnection runs the game loop on a single WebSocket connection.
+// Uses HTTP polling for state updates and WebSocket only for action submission.
+// Returns an error when the connection breaks, or nil when the game ends.
+func (l *Loop) runOnConnection(ctx context.Context, conn *websocket.Conn, obs *models.Observation) (*models.Observation, error) {
+	defer conn.Close()
+
+	// Main action loop.
+	for !obs.GameOver {
+		select {
+		case <-ctx.Done():
+			return obs, ctx.Err()
+		default:
+		}
+
+		// Decide action.
+		action := l.strategy.Decide(obs)
+
+		// Build action message.
+		msg := api.BuildActionMessage(obs.Turn, action)
+
+		// Submit action via WebSocket.
+		if err := l.api.SubmitActionWebSocket(conn, msg); err != nil {
+			l.logger.Error("failed to submit action", "error", err, "turn", obs.Turn)
+			// Connection is likely dead — exit to reconnect.
+			return obs, fmt.Errorf("WebSocket write failed: %w", err)
+		}
+
+		l.logger.Info("action submitted", "turn", obs.Turn, "action", msg.Actions[0].Type)
+
+		// Wait for turn resolution by polling observations via HTTP.
+		currentTurn := obs.Turn
+		pollCtx, pollCancel := context.WithTimeout(ctx, 30*time.Second)
+
+		for obs.Turn == currentTurn && !obs.GameOver {
+			select {
+			case <-pollCtx.Done():
+				l.logger.Warn("turn resolution timed out")
+				pollCancel()
+				return obs, fmt.Errorf("turn resolution timed out at turn %d", currentTurn)
+			default:
+			}
+
+			time.Sleep(500 * time.Millisecond)
+			newObs, err := l.api.GetObservation(ctx)
+			if err != nil {
+				l.logger.Error("failed to get observation during polling", "error", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			obs = newObs
+
+			if obs.Turn != currentTurn {
+				l.logger.Info("turn resolved", "previous_turn", currentTurn, "new_turn", obs.Turn, "score", obs.Score)
+			}
+		}
+		pollCancel()
+	}
+
+	return obs, nil
+}
+
+// printFinalState prints the final game state including leaderboard.
+func (l *Loop) printFinalState(obs *models.Observation) {
+	fmt.Println("\n========== GAME OVER ==========")
+	fmt.Printf("Final Turn: %d\n", obs.Turn)
+	fmt.Printf("Your Score: %d\n", obs.Score)
+	fmt.Printf("Energy: %d\n", obs.Energy)
+	fmt.Printf("Territory: %d cells\n", countOwnedCells(obs))
+
+	// Print leaderboard if available.
+	l.logger.Info("fetching final leaderboard")
+	leaderboard, err := l.api.GetLeaderboard(context.Background())
+	if err != nil {
+		l.logger.Error("failed to get final leaderboard", "error", err)
+	} else {
+		if lb, ok := leaderboard["leaderboard"].([]interface{}); ok {
+			fmt.Println("\n--- Final Leaderboard ---")
+			for i, entry := range lb {
+				if m, ok := entry.(map[string]interface{}); ok {
+					fmt.Printf("%d. %s: %d points\n", i+1, m["player_id"], int(m["score"].(float64)))
+				}
+			}
+		}
+	}
+	fmt.Println("==============================")
+}
+
+// countOwnedCells counts how many cells the player owns.
+func countOwnedCells(obs *models.Observation) int {
+	count := 0
+	for _, cell := range obs.Cells {
+		if cell.Owner == obs.PlayerID {
+			count++
+		}
+	}
+	return count
+}

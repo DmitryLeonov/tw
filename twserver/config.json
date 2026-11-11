@@ -1,0 +1,26 @@
+{
+  "port": 8080,
+  "max_players": 20,
+  "max_turns": 200,
+  "width": 40,
+  "height": 40,
+  "turn_timeout": "15s",
+  "registration_delay": "1m",
+  "results_dir": "results",
+  "bots": {
+    "enabled": true,
+    "default_strategy": "random",
+    "decision_timeout": "2s",
+    "turn_delay": "5s",
+    "seed": 42,
+    "players": [
+      { "name": "Alpha", "strategy": "aggressive", "seed": 100 },
+      { "name": "Beta", "strategy": "defensive", "seed": 200 },
+      { "name": "Gamma", "strategy": "expansion", "seed": 300 },
+      { "name": "Delta", "strategy": "random", "seed": 400 },
+      { "name": "Echo", "strategy": "aggressive", "seed": 500 },
+      { "name": "Foxtrot", "strategy": "defensive", "seed": 600 },
+      { "name": "Golf", "strategy": "expansion", "seed": 700 }
+    ]
+  }
+}

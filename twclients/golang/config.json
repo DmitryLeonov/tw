@@ -1,0 +1,7 @@
+{
+  "server": "http://localhost:8080",
+  "player_name": "StudentBot",
+  "http_timeout": 10,
+  "log_level": "INFO",
+  "strategy": "simple"
+}
