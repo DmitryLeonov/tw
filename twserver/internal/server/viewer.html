@@ -308,6 +308,7 @@
   let gameState = null;
   let historyEntries = [];
   let playerColors = {};
+  let playerNameMap = {};
   let colorIndex = 0;
   let zoom = 1;
   let panX = 0, panY = 0;
@@ -442,6 +443,12 @@
     const botIds = new Set((gameState.bot_players || []).map(p => p.id));
     playersBody.innerHTML = '';
 
+    // Build name map for cell info panel.
+    playerNameMap = {};
+    for (const p of players) {
+      playerNameMap[p.id] = p.name || p.id;
+    }
+
     // Sort by current sortKey/sortDir
     const sorted = [...players].sort((a, b) => {
       let va = a[sortKey] || 0;
@@ -573,7 +580,7 @@
     if (cell) {
       hoveredCell = cell;
       ciPos.textContent = `(${cell.x}, ${cell.y})`;
-      ciOwner.textContent = cell.owner || 'None';
+      ciOwner.textContent = playerNameMap[cell.owner] || cell.owner || 'None';
       ciType.textContent = cell.type;
       ciHealth.textContent = cell.health;
     } else {
