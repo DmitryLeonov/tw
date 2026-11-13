@@ -317,9 +317,10 @@ func (b *expansionBot) Decide(ctx context.Context, obs *game.Observation) (*game
 }
 
 // simpleBot follows a deterministic priority: attack > expand > fortify > pass.
+// When weakest cell health <= 3, defensive fallback activates: fortify > expand > pass.
 // It always picks the first available target from the server's pre-computed lists,
 // which already account for toroidal wrap-around.
-// Priority matches the C# SimpleStrategy client for comparable scores.
+// Priority matches the C# and Go client SimpleStrategy for comparable scores.
 type simpleBot struct {
 	name string
 }
@@ -328,6 +329,32 @@ func (b *simpleBot) Name() string     { return b.name }
 func (b *simpleBot) Strategy() string { return "simple" }
 
 func (b *simpleBot) Decide(ctx context.Context, obs *game.Observation) (*game.Action, error) {
+	// Find weakest cell health and its coordinate for defensive awareness.
+	weakestHealth := 999
+	var weakestCell *game.Point
+	for _, cell := range obs.Cells {
+		if cell.Owner == obs.PlayerID && cell.Health < weakestHealth {
+			weakestHealth = cell.Health
+			p := game.Point{X: cell.X, Y: cell.Y}
+			weakestCell = &p
+		}
+	}
+
+	// Defensive fallback: when weakest cell health <= 3, prioritize survival.
+	// Fortify weakest cell > expand > pass. Attack is skipped to prevent
+	// losing all territory when under pressure.
+	if weakestHealth <= 3 {
+		// Priority 1: Fortify weakest cell (costs 2 energy).
+		if obs.Energy >= 2 && weakestCell != nil {
+			return &game.Action{Type: "fortify", Target: weakestCell}, nil
+		}
+		// Priority 2: Expand to recover territory (costs 1 energy).
+		if obs.Energy >= 1 && len(obs.ExpandTargets) > 0 {
+			return &game.Action{Type: "expand", Target: &obs.ExpandTargets[0]}, nil
+		}
+		return &game.Action{Type: "pass"}, nil
+	}
+
 	// Priority 1: Attack adjacent enemy cell (costs 2 energy, gives +3 score).
 	if obs.Energy >= 2 && len(obs.AttackTargets) > 0 {
 		return &game.Action{Type: "attack", Target: &obs.AttackTargets[0]}, nil
@@ -339,8 +366,8 @@ func (b *simpleBot) Decide(ctx context.Context, obs *game.Observation) (*game.Ac
 	}
 
 	// Priority 3: Fortify weakest cell (costs 2 energy).
-	if obs.Energy >= 2 && len(obs.FortifyTargets) > 0 {
-		return &game.Action{Type: "fortify", Target: &obs.FortifyTargets[0]}, nil
+	if obs.Energy >= 2 && weakestCell != nil {
+		return &game.Action{Type: "fortify", Target: weakestCell}, nil
 	}
 
 	// No valid action.

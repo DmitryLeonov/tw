@@ -10,10 +10,13 @@ import (
 // SimpleStrategy implements a basic heuristic-based decision loop.
 //
 // Priority order:
-//   1. Attack an adjacent enemy cell (if energy >= 2 and enemy is weak).
+//   1. Attack an adjacent enemy cell (if energy >= 2 and weakest cell health > 3).
 //   2. Expand into an adjacent neutral cell (if energy >= 1).
-//   3. Fortify an owned cell with low health (if energy >= 2).
+//   3. Fortify the weakest owned cell (if energy >= 2).
 //   4. Pass.
+//
+// Defensive fallback: when weakest cell health <= 3, attack is skipped.
+// Priority becomes: fortify weakest > expand > pass.
 type SimpleStrategy struct {
 	logger *slog.Logger
 }
@@ -51,6 +54,36 @@ func (s *SimpleStrategy) Decide(obs *models.Observation) *models.Action {
 		}
 	}
 
+	// Find weakest cell health and coordinate for defensive awareness.
+	weakestHealth := 999
+	var weakestCell *models.Cell
+	for _, c := range ownedCells {
+		if c.Health < weakestHealth {
+			weakestHealth = c.Health
+			weakestCell = c
+		}
+	}
+
+	// Defensive fallback: when weakest cell health <= 3, prioritize survival.
+	// Fortify weakest cell > expand > pass. Attack is skipped to prevent
+	// losing all territory when under pressure from enemy counter-attacks.
+	if weakestHealth <= 3 {
+		// Priority 1: Fortify weakest cell (costs 2 energy).
+		if obs.Energy >= 2 {
+			s.logger.Info("deciding fortify (defensive)", "turn", obs.Turn, "x", weakestCell.X, "y", weakestCell.Y, "health", weakestCell.Health, "weakest", weakestHealth)
+			return &models.Action{Type: "fortify", Target: &models.Point{X: weakestCell.X, Y: weakestCell.Y}}
+		}
+		// Priority 2: Expand to recover territory (costs 1 energy).
+		expandTargets := s.findAdjacentNeutralCells(obs, playerID, cellsByCoord)
+		if len(expandTargets) > 0 && obs.Energy >= 1 {
+			target := expandTargets[0]
+			s.logger.Info("deciding expand (recover)", "turn", obs.Turn, "x", target.X, "y", target.Y, "weakest", weakestHealth)
+			return &models.Action{Type: "expand", Target: &models.Point{X: target.X, Y: target.Y}}
+		}
+		s.logger.Info("deciding pass (defensive)", "turn", obs.Turn, "weakest", weakestHealth)
+		return &models.Action{Type: "pass"}
+	}
+
 	// Find adjacent enemy cells (attack candidates).
 	attackTargets := s.findAdjacentEnemyCells(obs, playerID, cellsByCoord)
 	if len(attackTargets) > 0 && obs.Energy >= 2 {
@@ -73,12 +106,10 @@ func (s *SimpleStrategy) Decide(obs *models.Observation) *models.Action {
 		return &models.Action{Type: "expand", Target: &models.Point{X: target.X, Y: target.Y}}
 	}
 
-	// Find owned cells with low health (fortify candidates).
-	fortifyTargets := s.findLowHealthOwnedCells(ownedCells)
-	if len(fortifyTargets) > 0 && obs.Energy >= 2 {
-		target := fortifyTargets[0]
-		s.logger.Info("deciding fortify", "turn", obs.Turn, "x", target.X, "y", target.Y, "health", target.Health)
-		return &models.Action{Type: "fortify", Target: &models.Point{X: target.X, Y: target.Y}}
+	// Priority 3: Fortify weakest cell (costs 2 energy).
+	if obs.Energy >= 2 {
+		s.logger.Info("deciding fortify", "turn", obs.Turn, "x", weakestCell.X, "y", weakestCell.Y, "health", weakestCell.Health)
+		return &models.Action{Type: "fortify", Target: &models.Point{X: weakestCell.X, Y: weakestCell.Y}}
 	}
 
 	s.logger.Info("deciding pass", "turn", obs.Turn, "reason", "no valid action")

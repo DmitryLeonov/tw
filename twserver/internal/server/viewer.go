@@ -18,6 +18,7 @@ var viewerFS embed.FS
 // viewerClient represents a connected SSE viewer.
 type viewerClient struct {
 	events        chan viewerEvent
+	done          chan struct{}
 	headerWritten bool
 }
 
@@ -79,6 +80,8 @@ func (v *Viewer) broadcastState() {
 	for _, c := range clients {
 		select {
 		case c.events <- viewerEvent{Type: "state", Payload: string(data)}:
+		case <-c.done:
+			// Client disconnected; skip.
 		default:
 			// Drop slow clients.
 		}
@@ -100,6 +103,8 @@ func (v *Viewer) broadcastHistory() {
 	for _, c := range clients {
 		select {
 		case c.events <- viewerEvent{Type: "history", Payload: string(data)}:
+		case <-c.done:
+			// Client disconnected; skip.
 		default:
 		}
 	}
@@ -235,6 +240,7 @@ func (v *Viewer) ServeEvents(w http.ResponseWriter, r *http.Request) {
 
 	client := &viewerClient{
 		events: make(chan viewerEvent, 32),
+		done:   make(chan struct{}),
 	}
 
 	v.mu.Lock()
@@ -269,7 +275,7 @@ func (v *Viewer) ServeEvents(w http.ResponseWriter, r *http.Request) {
 			v.mu.Lock()
 			delete(v.clients, client)
 			v.mu.Unlock()
-			close(client.events)
+			close(client.done)
 			return
 		}
 	}

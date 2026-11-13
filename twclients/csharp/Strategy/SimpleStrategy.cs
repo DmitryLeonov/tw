@@ -31,8 +31,43 @@ public class SimpleStrategy : IGameStrategy
         if (!myCells.Any())
             return new TerritoryWars.Models.Action { Type = "pass" };
 
+        // Find weakest cell health for defensive awareness.
+        var weakestCell = myCells.OrderBy(c => c.Health).FirstOrDefault();
+        var weakestHealth = weakestCell?.Health ?? 999;
+
         // Build a set of cells adjacent to our owned cells
         var adjacentCells = GetAdjacentCells(myCells, observation);
+
+        // Defensive fallback: when weakest cell health <= 3, prioritize survival.
+        // Fortify weakest cell > expand > pass. Attack is skipped to prevent
+        // losing all territory when under pressure.
+        if (weakestHealth <= 3)
+        {
+            // Priority 1: Fortify weakest cell (costs 2 energy).
+            if (observation.Energy >= 2)
+            {
+                Console.WriteLine($"[STRATEGY] Fortifying weak cell at ({weakestCell.X}, {weakestCell.Y}) health={weakestHealth}");
+                return new TerritoryWars.Models.Action
+                {
+                    Type = "fortify",
+                    Target = new Point { X = weakestCell.X, Y = weakestCell.Y }
+                };
+            }
+            // Priority 2: Expand to recover territory (costs 1 energy).
+            var neutralCell = adjacentCells.FirstOrDefault(c =>
+                c.Owner == string.Empty);
+            if (neutralCell != null && observation.Energy >= 1)
+            {
+                Console.WriteLine($"[STRATEGY] Expanding to recover territory (weakest health={weakestHealth})");
+                return new TerritoryWars.Models.Action
+                {
+                    Type = "expand",
+                    Target = new Point { X = neutralCell.X, Y = neutralCell.Y }
+                };
+            }
+            Console.WriteLine($"[STRATEGY] Passing (defensive: weakest health={weakestHealth})");
+            return new TerritoryWars.Models.Action { Type = "pass" };
+        }
 
         // Priority 1: Attack adjacent enemy cells
         var enemyCell = adjacentCells.FirstOrDefault(c =>
@@ -48,21 +83,20 @@ public class SimpleStrategy : IGameStrategy
         }
 
         // Priority 2: Expand into adjacent neutral cells
-        var neutralCell = adjacentCells.FirstOrDefault(c =>
+        var neutralCell2 = adjacentCells.FirstOrDefault(c =>
             c.Owner == string.Empty);
-        if (neutralCell != null)
+        if (neutralCell2 != null)
         {
-            Console.WriteLine($"[STRATEGY] Expanding to neutral at ({neutralCell.X}, {neutralCell.Y})");
+            Console.WriteLine($"[STRATEGY] Expanding to neutral at ({neutralCell2.X}, {neutralCell2.Y})");
             return new TerritoryWars.Models.Action
             {
                 Type = "expand",
-                Target = new Point { X = neutralCell.X, Y = neutralCell.Y }
+                Target = new Point { X = neutralCell2.X, Y = neutralCell2.Y }
             };
         }
 
-        // Priority 3: Fortify our weakest cell if we have safe territory
-        var weakestCell = myCells.OrderBy(c => c.Health).FirstOrDefault();
-        if (weakestCell != null && weakestCell.Health < 5)
+        // Priority 3: Fortify our weakest cell if health <= 3
+        if (weakestCell != null && weakestCell.Health <= 3)
         {
             Console.WriteLine($"[STRATEGY] Fortifying our cell at ({weakestCell.X}, {weakestCell.Y})");
             return new TerritoryWars.Models.Action
