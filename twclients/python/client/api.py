@@ -112,6 +112,7 @@ class GameApiClient:
             ws_url,
             ping_interval=20,
             ping_timeout=10,
+            close_timeout=5,
         )
         self._ws = ws
         return ws

@@ -306,7 +306,6 @@ func (s *Server) WebSocket(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case event, open := <-outbound:
-				_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				if !open {
 					_ = conn.WriteMessage(websocket.CloseMessage, []byte{})
 					return
@@ -315,7 +314,6 @@ func (s *Server) WebSocket(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			case <-pingTicker.C:
-				_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 					return
 				}
