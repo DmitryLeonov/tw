@@ -160,8 +160,7 @@ func TestExpansionBot_Decide(t *testing.T) {
 // --- BuildBotList ---
 
 func TestBuildBotList_Disabled(t *testing.T) {
-	cfg := BotConfig{Enabled: false}
-	agents, err := BuildBotList(cfg, 20)
+	agents, err := BuildBotList(false, 20)
 	if err != nil {
 		t.Fatalf("BuildBotList: %v", err)
 	}
@@ -170,83 +169,49 @@ func TestBuildBotList_Disabled(t *testing.T) {
 	}
 }
 
-func TestBuildBotList_Count(t *testing.T) {
-	cfg := BotConfig{
-		Enabled:         true,
-		Count:           3,
-		DefaultStrategy: StrategyRandom,
-		Seed:            100,
-	}
-	agents, err := BuildBotList(cfg, 20)
+func TestBuildBotList_FillsMaxPlayers(t *testing.T) {
+	agents, err := BuildBotList(true, 20)
 	if err != nil {
 		t.Fatalf("BuildBotList: %v", err)
 	}
-	if len(agents) != 3 {
-		t.Fatalf("expected 3 agents, got %d", len(agents))
+	if len(agents) != 20 {
+		t.Fatalf("expected 20 agents, got %d", len(agents))
 	}
+	for _, a := range agents {
+		// Names are "Bot-aggressive-1", "Bot-defensive-2", "Bot-expansion-3", ...
+		_ = a.Name()
+	}
+}
+
+func TestBuildBotList_StrategyRotation(t *testing.T) {
+	agents, err := BuildBotList(true, 5)
+	if err != nil {
+		t.Fatalf("BuildBotList: %v", err)
+	}
+	if len(agents) != 5 {
+		t.Fatalf("expected 5 agents, got %d", len(agents))
+	}
+	names := []string{"Bot-aggressive-1", "Bot-defensive-2", "Bot-expansion-3", "Bot-random-4", "Bot-simple-5"}
 	for i, a := range agents {
-		if a.Name() != "Bot-random-"+string(rune('1'+i)) {
-			// Names are "Bot-random-1", "Bot-random-2", "Bot-random-3"
-			t.Errorf("agent %d name: expected Bot-random-%d, got %s", i, i+1, a.Name())
+		if a.Name() != names[i] {
+			t.Errorf("agent %d: expected %s, got %s", i, names[i], a.Name())
 		}
 	}
 }
 
-func TestBuildBotList_ExceedsMaxPlayers(t *testing.T) {
-	cfg := BotConfig{
-		Enabled:         true,
-		Count:           25,
-		DefaultStrategy: StrategyRandom,
-	}
-	_, err := BuildBotList(cfg, 20)
-	if err == nil {
-		t.Fatal("expected error when bot count exceeds max players")
-	}
-}
-
-func TestBuildBotList_IndividualPlayers(t *testing.T) {
-	cfg := BotConfig{
-		Enabled: true,
-		Players: []BotPlayerConfig{
-			{Name: "Alpha", Strategy: StrategyAggressive, Seed: 1},
-			{Name: "Beta", Strategy: StrategyDefensive, Seed: 2},
-		},
-	}
-	agents, err := BuildBotList(cfg, 20)
+func TestBuildBotList_SeedUniqueness(t *testing.T) {
+	agents, err := BuildBotList(true, 3)
 	if err != nil {
 		t.Fatalf("BuildBotList: %v", err)
 	}
-	if len(agents) != 2 {
-		t.Fatalf("expected 2 agents, got %d", len(agents))
+	// Each bot should have a different seed (42, 43, 44), so decisions differ.
+	// We verify by checking names are unique.
+	names := make(map[string]bool)
+	for _, a := range agents {
+		names[a.Name()] = true
 	}
-	if agents[0].Name() != "Alpha" {
-		t.Errorf("expected Alpha, got %s", agents[0].Name())
-	}
-	if agents[1].Name() != "Beta" {
-		t.Errorf("expected Beta, got %s", agents[1].Name())
-	}
-}
-
-func TestBuildBotList_IndividualExceedsMaxPlayers(t *testing.T) {
-	players := make([]BotPlayerConfig, 25)
-	for i := range players {
-		players[i] = BotPlayerConfig{Name: "Bot", Strategy: StrategyRandom, Seed: int64(i)}
-	}
-	cfg := BotConfig{Enabled: true, Players: players}
-	_, err := BuildBotList(cfg, 20)
-	if err == nil {
-		t.Fatal("expected error when individual bot count exceeds max players")
-	}
-}
-
-func TestBuildBotList_ZeroCount(t *testing.T) {
-	cfg := BotConfig{Enabled: true, Count: 0}
-	agents, err := BuildBotList(cfg, 20)
-	if err != nil {
-		t.Fatalf("BuildBotList: %v", err)
-	}
-	if agents != nil {
-		t.Errorf("expected nil for zero count, got %d", len(agents))
+	if len(names) != 3 {
+		t.Errorf("expected 3 unique names, got %d", len(names))
 	}
 }
 

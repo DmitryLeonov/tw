@@ -15,6 +15,7 @@ type Config struct {
 	HTTPTimeout time.Duration `json:"http_timeout"`
 	LogLevel    string        `json:"log_level"`
 	Strategy    string        `json:"strategy"`
+	MaxRetries  int           `json:"max_retries"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -25,6 +26,7 @@ func DefaultConfig() *Config {
 		HTTPTimeout: 10 * time.Second,
 		LogLevel:    "INFO",
 		Strategy:    "simple",
+		MaxRetries:  10,
 	}
 }
 

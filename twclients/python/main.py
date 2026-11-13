@@ -83,6 +83,7 @@ def build_config(args: argparse.Namespace) -> Dict[str, Any]:
         "http_timeout": 10,
         "log_level": "INFO",
         "strategy": "simple",
+        "max_retries": 10,
     }
 
     if args.config:
@@ -109,7 +110,7 @@ def setup_logging(level: str) -> None:
     )
 
 
-async def run_game(server_url: str, player_name: str, http_timeout: float, strategy_name: str) -> int:
+async def run_game(server_url: str, player_name: str, http_timeout: float, strategy_name: str, max_retries: int = 10) -> int:
     """Register and run the async game loop."""
     # Register
     try:
@@ -137,7 +138,7 @@ async def run_game(server_url: str, player_name: str, http_timeout: float, strat
         return 1
 
     # Run game loop
-    loop = GameLoop(api_client=api_client, strategy=strategy)
+    loop = GameLoop(api_client=api_client, strategy=strategy, max_retries=max_retries)
     try:
         await loop.run()
     except KeyboardInterrupt:
@@ -162,8 +163,9 @@ def main() -> int:
     player_name = config["player_name"]
     http_timeout = config.get("http_timeout", 10)
     strategy_name = config.get("strategy", "simple")
+    max_retries = config.get("max_retries", 10)
 
-    return asyncio.run(run_game(server_url, player_name, http_timeout, strategy_name))
+    return asyncio.run(run_game(server_url, player_name, http_timeout, strategy_name, max_retries))
 
 
 if __name__ == "__main__":

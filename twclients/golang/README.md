@@ -70,10 +70,10 @@ cd /apps/tw/twclients/golang
 go mod tidy
 
 # Build the client
-go build -o tw-client ./cmd/client/
+go build -o client ./cmd/client/
 
 # Run it
-./tw-client
+./client
 ```
 
 ## Usage
@@ -82,25 +82,25 @@ go build -o tw-client ./cmd/client/
 
 ```bash
 # Use default config (config.json)
-./tw-client
+./client
 
 # Specify server URL
-./tw-client --server http://localhost:8080
+./client --server http://localhost:8080
 
 # Specify player name
-./tw-client --name MyBot
+./client --name MyBot
 
 # Specify config file
-./tw-client --config my-config.json
+./client --config my-config.json
 
 # Set log level
-./tw-client --log-level DEBUG
+./client --log-level DEBUG
 ```
 
 ### All Flags
 
 ```
-./tw-client --help
+./client --help
 
 Flags:
   --config string    Path to config JSON file (default "config.json")
@@ -110,12 +110,6 @@ Flags:
 ```
 
 ### Using the Config File
-
-Copy the example config and customize:
-
-```bash
-# config.json уже содержит пример конфигурации
-```
 
 Edit `config.json`:
 
@@ -147,7 +141,7 @@ Command-line flags override config file values:
 
 ```bash
 # This overrides player_name from config.json
-./tw-client --name OverrideName --log-level DEBUG
+./client --name OverrideName --log-level DEBUG
 ```
 
 ## How to Write Custom Strategies
@@ -175,13 +169,12 @@ type Strategy interface {
 package strategy
 
 import (
-    "fmt"
     "twclient/internal/models"
 )
 
 type AggressiveStrategy struct{}
 
-func NewAggressiveStrategy() *AggressiveStrategy {
+func NewAggressiveStrategy(logger *slog.Logger) *AggressiveStrategy {
     return &AggressiveStrategy{}
 }
 
@@ -233,7 +226,7 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
     case "simple":
         return strategy.NewSimpleStrategy(logger)
     case "aggressive":
-        return strategy.NewAggressiveStrategy()
+        return strategy.NewAggressiveStrategy(logger)
     default:
         return strategy.NewSimpleStrategy(logger)
     }
@@ -264,6 +257,7 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
 - **Adjacency**: Actions require the target to be adjacent (up/down/left/right) to your territory
 - **Turn Limit**: Default 200 turns
 - **Scoring**: +1 for expand, +3 for attack (conquest), -2 for attacked cell owner
+- **Toroidal Map**: Coordinates wrap around using `% Width` and `% Height`
 
 ## Troubleshooting
 
@@ -277,7 +271,7 @@ Error: join request failed: Post "http://localhost:8080/api/v1/join": dial tcp 1
 
 ```bash
 cd /apps/tw/twserver
-go run ./cmd/server/
+go run ./cmd/server -config config.json
 ```
 
 ### Unauthorized Error
@@ -313,7 +307,7 @@ The client loads the entire game state (all cells) into memory each turn. For a 
 Run with `--log-level DEBUG` for verbose output:
 
 ```bash
-./tw-client --log-level DEBUG
+./client --log-level DEBUG
 ```
 
 This shows every decision, action submission, and turn resolution.

@@ -101,7 +101,10 @@ func (s *SimpleStrategy) findAdjacentEnemyCells(obs *models.Observation, playerI
 
 	for _, own := range ownedCells {
 		for _, dir := range dirs {
-			key := fmt.Sprintf("%d,%d", own.X+dir[0], own.Y+dir[1])
+			// Wrap around edges (toroidal map)
+			x := (own.X + dir[0] + obs.Width) % obs.Width
+			y := (own.Y + dir[1] + obs.Height) % obs.Height
+			key := fmt.Sprintf("%d,%d", x, y)
 			if neighbor, ok := cellsByCoord[key]; ok {
 				if neighbor.Owner != "" && neighbor.Owner != playerID && !seen[key] {
 					seen[key] = true
@@ -130,7 +133,10 @@ func (s *SimpleStrategy) findAdjacentNeutralCells(obs *models.Observation, playe
 
 	for _, own := range ownedCells {
 		for _, dir := range dirs {
-			key := fmt.Sprintf("%d,%d", own.X+dir[0], own.Y+dir[1])
+			// Wrap around edges (toroidal map)
+			x := (own.X + dir[0] + obs.Width) % obs.Width
+			y := (own.Y + dir[1] + obs.Height) % obs.Height
+			key := fmt.Sprintf("%d,%d", x, y)
 			if neighbor, ok := cellsByCoord[key]; ok {
 				if neighbor.Owner == "" && !seen[key] {
 					seen[key] = true

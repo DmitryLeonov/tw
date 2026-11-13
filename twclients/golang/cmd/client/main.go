@@ -73,9 +73,9 @@ func main() {
 	strat := createStrategy(cfg.Strategy, logger)
 
 	// Create and run game loop.
-	loop := game.NewWithLogger(client, strat, logger)
+	loop := game.NewWithLogger(client, strat, logger, cfg.MaxRetries)
 
-	logger.Info("entering game loop")
+	logger.Info("entering game loop", "max_retries", cfg.MaxRetries)
 	if err := loop.Run(ctx); err != nil {
 		logger.Error("game loop error", "error", err)
 		os.Exit(1)

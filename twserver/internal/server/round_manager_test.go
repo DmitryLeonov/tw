@@ -13,7 +13,7 @@ func newTestRoundManager(t *testing.T) (*RoundManager, *game.Engine) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -137,7 +137,7 @@ func TestSubmitAction_GameOver(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  2,
 		MaxTurns:    1,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})

@@ -49,6 +49,7 @@ type RoundManager struct {
 	gen     int64                   // monotonically increasing generation counter
 
 	actionCh chan playerAction // actions from WS handlers
+	forceTurnCh chan struct{} // forces select to check turnSignal after immediate resolve
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -75,6 +76,7 @@ func NewRoundManager(engine *game.Engine, gameStarted chan struct{}) *RoundManag
 		engine:      engine,
 		clients:     make(map[string]*clientState),
 		actionCh:    make(chan playerAction, 256),
+		forceTurnCh: make(chan struct{}, 1),
 		ctx:         ctx,
 		cancel:      cancel,
 		gameStarted: gameStarted,
@@ -108,7 +110,7 @@ func (rm *RoundManager) Connect(conn *websocket.Conn, playerID string) chan game
 
 	gen := rm.gen
 
-	ch := make(chan game.Event, 16)
+	ch := make(chan game.Event, 256)
 	rm.clients[playerID] = &clientState{
 		conn:       conn,
 		outbound:   ch,
@@ -145,7 +147,11 @@ func (rm *RoundManager) Disconnect(playerID string, gen int64) {
 	}
 	cs.closed = true
 	close(cs.outbound)
-	delete(rm.clients, playerID)
+	// Do NOT delete from rm.clients — the run() loop checks
+	// rm.clients[pa.playerID] to validate actions. If the entry
+	// is removed, subsequent actions from this playerID are silently
+	// dropped. The entry stays so reconnect via Connect() works
+	// and the run() loop can still see the player.
 }
 
 // enqueue sends an event to a player's outbound channel. If the channel
@@ -155,6 +161,10 @@ func (rm *RoundManager) enqueue(playerID string, event game.Event) {
 	defer rm.mu.Unlock()
 	cs := rm.clients[playerID]
 	if cs == nil || cs.closed {
+		return
+	}
+	// Bots have no WebSocket connection — skip enqueueing events.
+	if cs.conn == nil {
 		return
 	}
 	select {
@@ -183,7 +193,17 @@ func (rm *RoundManager) run() {
 	var timeoutCh <-chan time.Time
 
 	// Wait for registration delay to expire before allowing the first turn.
-	<-rm.gameStarted
+	// Also listen for ctx cancellation so Stop() can unblock this.
+	select {
+	case <-rm.gameStarted:
+	case <-rm.ctx.Done():
+		return
+	}
+
+	// Heartbeat ticker — broadcast STILL_ALIVE every 10s so clients
+	// know the server is alive even when no turns are resolving.
+	heartbeat := time.NewTicker(10 * time.Second)
+	defer heartbeat.Stop()
 
 	for {
 		rm.pauseMu.Lock()
@@ -209,6 +229,22 @@ func (rm *RoundManager) run() {
 			rm.cleanupAll()
 			return
 
+		case <-rm.forceTurnCh:
+			// Drain any remaining signals on this channel.
+			select {
+			case <-rm.forceTurnCh:
+			default:
+			}
+
+			// Get the next turn's signal channel.
+			currentTurn, signalCh = rm.engine.TurnSignal()
+			turnSignal = signalCh
+
+			// Start timeout for the new turn.
+			timeoutCh = nil
+			timer := time.NewTimer(rm.engine.Config().TurnDelay)
+			timeoutCh = timer.C
+
 		case pa, ok := <-rm.actionCh:
 			if !ok {
 				return
@@ -217,11 +253,7 @@ func (rm *RoundManager) run() {
 			// Check if this player's connection is still valid.
 			rm.mu.Lock()
 			cs := rm.clients[pa.playerID]
-			if cs == nil {
-				rm.mu.Unlock()
-				continue
-			}
-			if cs.closed || cs.generation != rm.gen {
+			if cs == nil || cs.closed {
 				rm.mu.Unlock()
 				continue
 			}
@@ -245,15 +277,72 @@ func (rm *RoundManager) run() {
 				Turn: result.Turn,
 			})
 
+			// Check if turn was resolved immediately (all players submitted).
+			// If so, handle it inline instead of relying on forceTurnCh.
+			engineTurn, _ := rm.engine.TurnSignal()
+			if engineTurn > currentTurn {
+				resolvedTurn := currentTurn
+				if resolvedTurn > lastResolvedTurn {
+					rm.broadcastResolvedTurn(resolvedTurn)
+					lastResolvedTurn = resolvedTurn
+				}
+
+				if rm.engine.IsGameOver() {
+					rm.broadcastGameOver()
+					rm.cleanupAll()
+					return
+				}
+
+				// Get the next turn's signal channel.
+				currentTurn, signalCh = rm.engine.TurnSignal()
+				turnSignal = signalCh
+
+				// Start timeout for the new turn.
+				timeoutCh = nil
+				timer := time.NewTimer(rm.engine.Config().TurnDelay)
+				timeoutCh = timer.C
+			}
+
 			// Start timeout on first successful action this turn.
 			if timeoutCh == nil {
-				timer := time.NewTimer(rm.engine.Config().TurnTimeout)
+				timer := time.NewTimer(rm.engine.Config().TurnDelay)
 				timeoutCh = timer.C
 				_ = timer // timer is kept alive by timeoutCh
 			}
 
-		case <-turnSignal:
+		case <-rm.forceTurnCh:
+			// Turn was resolved immediately — handle it now.
+			resolvedTurn := currentTurn
+			if resolvedTurn > lastResolvedTurn {
+				rm.broadcastResolvedTurn(resolvedTurn)
+				lastResolvedTurn = resolvedTurn
+			}
+
+			if rm.engine.IsGameOver() {
+				rm.broadcastGameOver()
+				rm.cleanupAll()
+				return
+			}
+
+			// Get the next turn's signal channel.
+			currentTurn, signalCh = rm.engine.TurnSignal()
+			turnSignal = signalCh
+
+			// Start timeout for the new turn.
+			timeoutCh = nil
+			timer := time.NewTimer(rm.engine.Config().TurnDelay)
+			timeoutCh = timer.C
+
+		case _, ok := <-turnSignal:
+			if !ok {
+				// Channel closed — get a fresh one and retry.
+				currentTurn, signalCh = rm.engine.TurnSignal()
+				turnSignal = signalCh
+				continue
+			}
+
 			// Turn was resolved (all players submitted).
+			// Drain any remaining signals on this channel.
 			select {
 			case <-turnSignal:
 			default:
@@ -278,11 +367,11 @@ func (rm *RoundManager) run() {
 
 			// Start timeout for the new turn.
 			timeoutCh = nil
-			timer := time.NewTimer(rm.engine.Config().TurnTimeout)
+			timer := time.NewTimer(rm.engine.Config().TurnDelay)
 			timeoutCh = timer.C
 
 		case <-timeoutCh:
-			// Timeout expired — try to resolve the turn.
+			// Timeout expired — resolve the turn.
 			resolved := rm.engine.ResolveExpiredTurn()
 			if resolved {
 				resolvedTurn := currentTurn
@@ -303,13 +392,23 @@ func (rm *RoundManager) run() {
 
 				// Start timeout for the new turn.
 				timeoutCh = nil
-				timer := time.NewTimer(rm.engine.Config().TurnTimeout)
+				timer := time.NewTimer(rm.engine.Config().TurnDelay)
 				timeoutCh = timer.C
 			} else {
 				// Not resolved — re-arm the timer.
 				timeoutCh = nil
-				timer := time.NewTimer(rm.engine.Config().TurnTimeout)
+				timer := time.NewTimer(rm.engine.Config().TurnDelay)
 				timeoutCh = timer.C
+			}
+
+		case <-heartbeat.C:
+			// Broadcast STILL_ALIVE to all connected clients.
+			players := rm.engine.Leaderboard()
+			for _, p := range players {
+				rm.enqueue(p.ID, game.Event{
+					Type:    "STILL_ALIVE",
+					Message: "server alive",
+				})
 			}
 		}
 	}
@@ -414,10 +513,16 @@ func (rm *RoundManager) printResults() {
 func (rm *RoundManager) cleanupAll() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
+
+	// Close all WS connections. No GAME_OVER needed — clients get
+	// "unauthorized" on reconnect because tokens were invalidated by Stop().
 	for _, cs := range rm.clients {
 		if !cs.closed {
 			cs.closed = true
 			close(cs.outbound)
+			if cs.conn != nil {
+				cs.conn.Close()
+			}
 		}
 	}
 	rm.clients = make(map[string]*clientState)
@@ -446,6 +551,22 @@ func (rm *RoundManager) SubmitAction(playerID string, msg game.ActionMessage, ou
 	}:
 	case <-rm.ctx.Done():
 	}
+}
+
+// Stop halts the event loop and waits for it to exit.
+// Used by the "stop" command to fully halt turn processing.
+func (rm *RoundManager) Stop() {
+	rm.cancel()
+	rm.wg.Wait()
+}
+
+// Restart creates a fresh context and restarts the event loop.
+func (rm *RoundManager) Restart() {
+	ctx, cancel := context.WithCancel(context.Background())
+	rm.ctx = ctx
+	rm.cancel = cancel
+	rm.wg.Add(1)
+	go rm.run()
 }
 
 // Shutdown gracefully stops the Round Manager.
@@ -488,4 +609,32 @@ func (rm *RoundManager) ResetGameStarted() {
 		close(rm.gameStarted)
 	}
 	rm.gameStarted = make(chan struct{})
+}
+
+// SetGameStarted replaces the gameStarted channel.
+// Used to keep Server.gameStarted and RoundManager.gameStarted in sync.
+func (rm *RoundManager) SetGameStarted(ch chan struct{}) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	select {
+	case <-rm.gameStarted:
+	default:
+		close(rm.gameStarted)
+	}
+	rm.gameStarted = ch
+}
+
+// Reset stops the event loop and restarts it with a fresh context.
+// Used by the "stop" command to fully halt turn processing.
+func (rm *RoundManager) Reset() {
+	// Cancel current context — run() exits via ctx.Done().
+	rm.cancel()
+	rm.wg.Wait()
+
+	// Create a fresh context and restart the run loop.
+	ctx, cancel := context.WithCancel(context.Background())
+	rm.ctx = ctx
+	rm.cancel = cancel
+	rm.wg.Add(1)
+	go rm.run()
 }

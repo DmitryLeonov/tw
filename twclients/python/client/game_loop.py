@@ -23,9 +23,10 @@ class GameLoop:
         asyncio.run(loop.run())
     """
 
-    def __init__(self, api_client: GameApiClient, strategy: IGameStrategy) -> None:
+    def __init__(self, api_client: GameApiClient, strategy: IGameStrategy, max_retries: int = 10) -> None:
         self.api_client = api_client
         self.strategy = strategy
+        self.max_retries = max_retries
         self._ws = None
 
     async def run(self) -> None:
@@ -40,6 +41,9 @@ class GameLoop:
         4. Print final score and leaderboard.
         """
         logger.info("Starting game loop")
+
+        max_reconnects = self.max_retries
+        reconnects = 0
 
         # --- Connect ---
         self._ws = await self.api_client.connect()
@@ -62,6 +66,35 @@ class GameLoop:
 
             # --- Main loop ---
             while not observation.game_over:
+                # Fetch latest observation via HTTP before deciding (prevents stale state).
+                try:
+                    observation = self.api_client.get_observation()
+                except Exception as exc:
+                    logger.error("Failed to fetch observation: %s", exc)
+                    reconnects += 1
+                    if reconnects >= max_reconnects:
+                        logger.info("Max reconnects reached (%d), stopping", max_reconnects)
+                        return
+                    # Before reconnecting, check HTTP state — if game is reset (401), exit.
+                    try:
+                        new_obs = self.api_client.get_observation()
+                        if new_obs.turn == 0 and len(new_obs.players) < 2:
+                            logger.info("Game reset detected — exiting")
+                            return
+                    except Exception:
+                        pass
+                    try:
+                        self._ws = await self.api_client.connect()
+                        observation = await self._wait_for_observation()
+                        if observation is None:
+                            return
+                    except Exception:
+                        return
+                    continue
+
+                if observation.game_over:
+                    break
+
                 # Decide action
                 action = self.strategy.decide(observation)
 
@@ -70,6 +103,10 @@ class GameLoop:
                 success = await self.api_client.submit_action(msg)
                 if not success:
                     logger.error("Failed to submit action — reconnecting")
+                    reconnects += 1
+                    if reconnects >= max_reconnects:
+                        logger.info("Max reconnects reached (%d), stopping", max_reconnects)
+                        return
                     self._ws = await self.api_client.connect()
                     observation = await self._wait_for_observation()
                     if observation is None:
@@ -86,8 +123,51 @@ class GameLoop:
                 # Wait for turn resolution and next observation
                 observation = await self._wait_for_observation()
                 if observation is None:
-                    logger.error("Lost connection — game may have ended")
-                    break
+                    logger.warning("Lost connection or timeout — attempting recovery")
+
+                    # Before reconnecting, check HTTP state — if game_over or reset, exit.
+                    try:
+                        new_obs = self.api_client.get_observation()
+                        if new_obs.game_over:
+                            logger.info("Game over detected via HTTP state")
+                            observation = new_obs
+                            break
+                        if new_obs.turn == 0 and len(new_obs.players) < 2:
+                            logger.info("Game reset detected — exiting")
+                            return
+                    except Exception:
+                        pass
+
+                    reconnects += 1
+                    if reconnects >= max_reconnects:
+                        logger.info("Max reconnects reached (%d), stopping", max_reconnects)
+                        return
+                    # Try to reconnect
+                    try:
+                        self._ws = await self.api_client.connect()
+                        # Check HTTP state first — if turn advanced, action was accepted
+                        new_obs = self.api_client.get_observation()
+                        if new_obs.turn > observation.turn:
+                            logger.info("Turn advanced after reconnect — action accepted")
+                            observation = new_obs
+                            reconnects = 0
+                            continue
+                        # Game hasn't started yet — keep retrying to get events
+                        # instead of exiting on first timeout
+                        for attempt in range(max_reconnects):
+                            observation = await self._wait_for_observation()
+                            if observation is not None:
+                                logger.info("Reconnected and received observation at turn %d", observation.turn)
+                                reconnects = 0
+                                break
+                            logger.warning("Reconnect attempt %d/%d — no event yet", attempt + 1, max_reconnects)
+                        else:
+                            logger.error("Failed to receive observation after %d reconnect attempts", max_reconnects)
+                            return
+                        continue
+                    except Exception:
+                        return
+                reconnects = 0
 
                 logger.info(
                     "Turn %d complete: score=%d energy=%d game_over=%s",
@@ -113,7 +193,7 @@ class GameLoop:
             return None
 
         while True:
-            event = await self.api_client.receive_event(timeout=30.0)
+            event = await self.api_client.receive_event(timeout=5.0)
             if event is None:
                 logger.warning("Timeout waiting for event")
                 return None
@@ -142,6 +222,10 @@ class GameLoop:
 
             if event.type == "ACTION_ACCEPTED":
                 # Continue waiting for TURN_RESOLVED + OBSERVATION
+                continue
+
+            if event.type == "STILL_ALIVE":
+                # Server heartbeat — just keep waiting
                 continue
 
             # CONNECTED and other events — skip

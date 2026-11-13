@@ -104,12 +104,11 @@ public class SimpleStrategy : IGameStrategy
                     (cell.X, cell.Y + 1)
                 };
 
-                foreach (var (nx, ny) in neighbors)
+                foreach (var (rawX, rawY) in neighbors)
                 {
-                    // Check bounds
-                    if (nx < 0 || nx >= observation.Width ||
-                        ny < 0 || ny >= observation.Height)
-                        continue;
+                    // Wrap around edges (toroidal map)
+                    var nx = (rawX + observation.Width) % observation.Width;
+                    var ny = (rawY + observation.Height) % observation.Height;
 
                     // Find the cell at this position
                     var neighbor = observation.Cells.FirstOrDefault(

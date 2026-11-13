@@ -19,12 +19,12 @@ func TestNewBotManager(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
+	bm := NewBotManager(engine, rm, nil)
 
 	if bm == nil {
 		t.Fatal("expected non-nil BotManager")
@@ -34,30 +34,25 @@ func TestNewBotManager(t *testing.T) {
 	}
 }
 
-func TestBotManager_StartBots(t *testing.T) {
+func TestBotManager_StartBotsOnDemand(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
 
-	agents, err := BuildBotList(BotConfig{
-		Enabled:         true,
-		Count:           2,
-		DefaultStrategy: StrategyRandom,
-		Seed:            42,
-	}, 4)
-	if err != nil {
-		t.Fatalf("BuildBotList: %v", err)
+	agents := []PlayerAgent{
+		mustCreateBot("Bot-1", StrategyRandom, 1),
+		mustCreateBot("Bot-2", StrategyRandom, 2),
 	}
+	bm := NewBotManager(engine, rm, agents)
 
-	err = bm.StartBots(agents, 2*time.Second)
+	err := bm.StartBotsOnDemand(2)
 	if err != nil {
-		t.Fatalf("StartBots: %v", err)
+		t.Fatalf("StartBotsOnDemand: %v", err)
 	}
 
 	if bm.Count() != 2 {
@@ -73,25 +68,24 @@ func TestBotManager_StartBots(t *testing.T) {
 	bm.Shutdown()
 }
 
-func TestBotManager_StartBots_ExceedsMaxPlayers(t *testing.T) {
+func TestBotManager_StartBotsOnDemand_ExceedsMaxPlayers(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  2,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
 
-	// Pre-build agents (bypass BuildBotList's own max-players check).
 	agents := []PlayerAgent{
 		mustCreateBot("Bot-1", StrategyRandom, 1),
 		mustCreateBot("Bot-2", StrategyRandom, 2),
 		mustCreateBot("Bot-3", StrategyRandom, 3),
 	}
+	bm := NewBotManager(engine, rm, agents)
 
-	err := bm.StartBots(agents, 2*time.Second)
+	err := bm.StartBotsOnDemand(3)
 	if err == nil {
 		t.Fatal("expected error when bot count exceeds max players")
 	}
@@ -101,23 +95,21 @@ func TestBotManager_Shutdown(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
 
-	agents, _ := BuildBotList(BotConfig{
-		Enabled:         true,
-		Count:           2,
-		DefaultStrategy: StrategyRandom,
-		Seed:            42,
-	}, 4)
+	agents := []PlayerAgent{
+		mustCreateBot("Bot-1", StrategyRandom, 1),
+		mustCreateBot("Bot-2", StrategyRandom, 2),
+	}
+	bm := NewBotManager(engine, rm, agents)
 
-	err := bm.StartBots(agents, 2*time.Second)
+	err := bm.StartBotsOnDemand(2)
 	if err != nil {
-		t.Fatalf("StartBots: %v", err)
+		t.Fatalf("StartBotsOnDemand: %v", err)
 	}
 
 	// Shutdown should complete without hanging.
@@ -139,12 +131,12 @@ func TestBotManager_LogEntries(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
+	bm := NewBotManager(engine, rm, nil)
 
 	// Log entries should be empty initially.
 	entries := bm.LogEntries()
@@ -157,24 +149,22 @@ func TestBotManager_ConcurrentStartAndShutdown(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
 
-	agents, _ := BuildBotList(BotConfig{
-		Enabled:         true,
-		Count:           2,
-		DefaultStrategy: StrategyRandom,
-		Seed:            42,
-	}, 4)
+	agents := []PlayerAgent{
+		mustCreateBot("Bot-1", StrategyRandom, 1),
+		mustCreateBot("Bot-2", StrategyRandom, 2),
+	}
+	bm := NewBotManager(engine, rm, agents)
 
 	// Start bots and immediately shutdown — should not panic.
-	err := bm.StartBots(agents, 2*time.Second)
+	err := bm.StartBotsOnDemand(2)
 	if err != nil {
-		t.Fatalf("StartBots: %v", err)
+		t.Fatalf("StartBotsOnDemand: %v", err)
 	}
 
 	bm.Shutdown()

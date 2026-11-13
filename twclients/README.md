@@ -1,35 +1,35 @@
 # Territory Wars — External Game Clients
 
-Готовые клиенты для подключения к серверу Territory Wars на Python, C# и Go.
+Ready-made clients for connecting to the Territory Wars game server in Python, C#, and Go.
 
-## Назначение
+## Purpose
 
-Эти клиенты предоставляют студентам рабочую основу для разработки собственных игровых алгоритмов. Каждый клиент:
+These clients provide students with a working foundation for developing their own game algorithms. Each client:
 
-- Подключается к серверу по HTTP API и WebSocket
-- Регистрирует игрока и получает токен сессии
-- Получает состояние игры (Observation)
-- Отправляет действия (Actions) через WebSocket
-- Работает автономно до завершения матча
+- Connects to the server via HTTP API and WebSocket
+- Registers a player and receives a session token
+- Receives game state (Observation)
+- Sends actions (Actions) via WebSocket
+- Runs autonomously until the match ends
 
-## Общая архитектура
+## General Architecture
 
-Каждый клиент состоит из одинаковых логических компонентов:
+Each client consists of the same logical components:
 
-| Компонент | Описание |
-|-----------|----------|
-| **HTTP Client** | Взаимодействие с REST API (регистрация, получение состояния) |
-| **WebSocket Client** | Отправка действий и получение событий в реальном времени |
-| **API Models** | Структуры данных, соответствующие контракту сервера |
-| **Game Agent** | Алгоритм принятия решений (Strategy) |
-| **Game Loop** | Основной игровой цикл: observe → decide → submit → repeat |
-| **Configuration** | Параметры подключения, имя игрока, таймауты |
-| **Logging** | Информирование о ходе игры |
-| **Error Handling** | Обработка сетевых ошибок, таймаутов, некорректных ответов |
+| Component | Description |
+|-----------|-------------|
+| **HTTP Client** | REST API interaction (registration, state polling) |
+| **WebSocket Client** | Action submission and real-time event reception |
+| **API Models** | Data structures matching the server contract |
+| **Game Agent** | Decision-making algorithm (Strategy) |
+| **Game Loop** | Main game loop: observe → decide → submit → repeat |
+| **Configuration** | Connection parameters, player name, timeouts |
+| **Logging** | Game progress reporting |
+| **Error Handling** | Network errors, timeouts, invalid responses |
 
-## HTTP-протокол
+## HTTP Protocol
 
-### Регистрация
+### Registration
 ```
 POST /api/v1/join
 Content-Type: application/json
@@ -39,7 +39,7 @@ Content-Type: application/json
 Response: {"player_id": "p01", "token": "...", "websocket_url": "/ws"}
 ```
 
-### Получение состояния игры
+### Get Game State
 ```
 GET /api/v1/state
 Authorization: Bearer TOKEN
@@ -47,22 +47,22 @@ Authorization: Bearer TOKEN
 Response: Observation JSON
 ```
 
-### Получение таблицы лидеров
+### Get Leaderboard
 ```
 GET /api/v1/leaderboard
 
 Response: {"status": {...}, "leaderboard": [...], "results": [...]}
 ```
 
-### Отправка действий
-Действия отправляются через WebSocket:
+### Send Actions
+Actions are sent via WebSocket:
 ```
 ws://localhost:8080/ws?token=YOUR_TOKEN
 
 Message: {"type": "ACTION", "turn": 0, "actions": [{"type": "expand", "target": {"x": 20, "y": 4}}]}
 ```
 
-### Observation (состояние игры)
+### Observation (Game State)
 ```json
 {
   "match_id": "string",
@@ -79,22 +79,22 @@ Message: {"type": "ACTION", "turn": 0, "actions": [{"type": "expand", "target": 
 }
 ```
 
-### Action (действие)
+### Action
 ```json
 {"type": "expand", "target": {"x": 20, "y": 4}}
 ```
 
-Допустимые типы действий:
-- **expand** — захватить соседнюю нейтральную клетку (стоит 1 энергию)
-- **attack** — атаковать соседнюю клетку врага (стоит 2 энергии)
-- **fortify** — укрепить свою клетку (+2 здоровья, стоит 2 энергии)
-- **pass** — пропустить ход (бесплатно)
+Valid action types:
+- **expand** — claim an adjacent neutral cell (costs 1 energy)
+- **attack** — attack an adjacent enemy cell (costs 2 energy)
+- **fortify** — reinforce your own cell (+2 health, costs 2 energy)
+- **pass** — skip your turn (free)
 
-## Установка и запуск
+## Installation and Running
 
 ### Python Client
 
-**Требования:** Python 3.12+, [uv](https://github.com/astral-sh/uv)
+**Requirements:** Python 3.12+, [uv](https://github.com/astral-sh/uv)
 
 ```bash
 cd twclients/python
@@ -102,14 +102,14 @@ uv sync
 uv run python main.py --name PythonClient --config config.json
 ```
 
-Или с аргументами командной строки:
+Or with command-line arguments:
 ```bash
 uv run python main.py --server http://localhost:8080 --name "MyBot" --strategy aggressive
 ```
 
 ### C# Client
 
-**Требования:** .NET 8 SDK
+**Requirements:** .NET 10 SDK
 
 ```bash
 cd twclients/csharp
@@ -117,39 +117,97 @@ dotnet restore
 dotnet run -- --server http://localhost:8080 --name "MyBot"
 ```
 
-Или с конфигурационным файлом:
+Or with a configuration file:
 ```bash
 dotnet run -- --config config.json
 ```
 
 ### Go Client
 
-**Требования:** Go 1.22+
+**Requirements:** Go 1.22+
 
 ```bash
 cd twclients/golang
 go mod tidy
-go run ./cmd/client --server http://localhost:8080 --name "MyBot"
+go build -o client ./cmd/client/
+./client --name MyBot --config config.json
 ```
 
-Или с конфигурационным файлом:
+Or with command-line arguments:
 ```bash
-go run ./cmd/client --config config.json
+./client --server http://localhost:8080 --name "MyBot" --log-level DEBUG
 ```
 
-## SimpleBot — базовая стратегия
+## Running All Clients
 
-Все три клиента включают стратегию `SimpleBot`, которая:
+### `run.sh` Script
 
-1. **Анализирует территорию** — определяет свои клетки и соседние нейтральные/вражеские
-2. **Оценивает ресурсы** — проверяет уровень энергии
-3. **Выбирает действие** по приоритету:
-   - **Expand** — если есть энергия и соседние нейтральные клетки
-   - **Attack** — если есть энергия и соседние вражеские клетки
-   - **Fortify** — если есть энергия и свои клетки с низким здоровьем
-   - **Pass** — если нет допустимых действий
+```bash
+# Start server + all 3 clients (no bots)
+./run.sh
 
-## Как написать собственную стратегию
+# Start server with bots (bots play, no external clients)
+./run.sh --bots
+
+# Start server with bots + external clients
+./run.sh --mixed
+
+# Skip a specific language
+./run.sh --no-go --no-python
+```
+
+### Running 5 Copies of Each Client
+
+```bash
+# Go
+cd twclients/golang
+for i in 1 2 3 4 5; do
+  nohup ./client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+done
+
+# Python
+cd twclients/python
+export PATH="/root/.local/bin:$PATH"
+for i in 1 2 3 4 5; do
+  nohup uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
+done
+
+# C#
+cd twclients/csharp
+export PATH="/opt/dotnet:$PATH"
+for i in 1 2 3 4 5; do
+  nohup dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+done
+```
+
+## Strategies
+
+### Simple — Basic Strategy
+
+All three clients include the `simple` strategy, which:
+
+1. **Analyzes territory** — identifies own cells and adjacent neutral/enemy cells
+2. **Evaluates resources** — checks energy level
+3. **Chooses action** by priority:
+   - **Expand** — if there is energy and adjacent neutral cells
+   - **Attack** — if there is energy and adjacent enemy cells
+   - **Fortify** — if there is energy and own cells with low health
+   - **Pass** — if no valid actions
+
+### Aggressive — Aggressive Strategy (Python)
+
+The Python client includes the `aggressive` strategy:
+
+1. **Attack** — priority: attack enemy cells
+2. **Expand** — then capture neutral cells
+3. **Fortify** — reinforce weak cells
+4. **Pass** — if no actions
+
+```bash
+uv run python main.py --strategy aggressive
+```
+
+## How to Write Your Own Strategy
 
 ### Python
 
@@ -159,8 +217,19 @@ from client.models import Observation, Action
 
 class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
-        # Ваш алгоритм здесь
+        # Your algorithm here
         return Action(type="expand", target={"x": 10, "y": 10})
+```
+
+Register in `build_strategy()`:
+```python
+def build_strategy(name: str) -> IGameStrategy:
+    strategies = {
+        "simple": SimpleStrategy,
+        "aggressive": AggressiveStrategy,
+        "my_strategy": MyStrategy,
+    }
+    return strategies[name]()
 ```
 
 ### C#
@@ -172,10 +241,20 @@ public class MyStrategy : IGameStrategy
 {
     public Action Decide(Observation observation)
     {
-        // Ваш алгоритм здесь
+        // Your algorithm here
         return new Action { Type = "expand", Target = new Point { X = 10, Y = 10 } };
     }
 }
+```
+
+Register in `Program.cs`:
+```csharp
+IGameStrategy strategy = strategyName.ToLower() switch
+{
+    "simple" => new SimpleStrategy(),
+    "aggressive" => new AggressiveStrategy(),
+    _ => throw new ArgumentException(...)
+};
 ```
 
 ### Go
@@ -188,72 +267,119 @@ import "twclient/internal/models"
 type MyStrategy struct{}
 
 func (s *MyStrategy) Decide(observation *models.Observation) *models.Action {
-    // Ваш алгоритм здесь
+    // Your algorithm here
     return &models.Action{Type: "expand", Target: &models.Point{X: 10, Y: 10}}
 }
 ```
 
-## Диагностика распространённых ошибок
+Register in `cmd/client/main.go`:
+```go
+func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy {
+    switch strings.ToLower(strategyName) {
+    case "simple":
+        return strategy.NewSimpleStrategy(logger)
+    case "aggressive":
+        return strategy.NewAggressiveStrategy(logger)
+    default:
+        return strategy.NewSimpleStrategy(logger)
+    }
+}
+```
+
+## Game Mechanics
+
+### Map
+
+- Size: 40 × 40
+- **Toroidal** — coordinates wrap-around: `(x + 1) % Width`, `(y + 1) % Height`
+- 20 spawn positions
+- Cell types: `base` (base), `normal` (normal), `resource` (resource)
+
+### Rules
+
+- Each player starts with 5 energy and one base
+- One action per turn
+- All actions are resolved simultaneously at the round boundary
+- A missing action becomes `pass` on timeout
+- Match ends after `MAX_TURNS` (default 200)
+
+### Energy
+
+| Action | Cost |
+|--------|------|
+| `expand` | 1 |
+| `attack` | 2 |
+| `fortify` | 2 |
+| `pass` | 0 |
+
+### Cell Health
+
+- Normal cells: start 3, max 7
+- Bases: start 5, max 7
+
+## Troubleshooting Common Errors
 
 ### Connection refused
 ```
 ERROR: Failed to connect to server: Connection refused
 ```
-**Решение:** Убедитесь, что сервер запущен: `go run ./cmd/server`
+**Fix:** Make sure the server is running: `./bin/server -config config.json`
 
 ### Invalid token
 ```
 ERROR: Unauthorized — invalid token
 ```
-**Решение:** Токен истёк или неверный. Перезапустите клиента.
+**Fix:** Token expired or invalid. Restart the client.
 
 ### Stale turn
 ```
 ERROR: Stale turn: current turn is 5
 ```
-**Решение:** Клиент отправляет действие для старого хода. Проверьте синхронизацию.
+**Fix:** Client sends action for an old turn. Check synchronization.
 
 ### Not enough energy
 ```
 ERROR: Action rejected: not enough energy
 ```
-**Решение:** Стратегия пытается действие без достаточной энергии. Используйте `pass`.
+**Fix:** Strategy tries an action without enough energy. Use `pass`.
 
 ### Target outside map
 ```
 ERROR: Action rejected: target is outside the map
 ```
-**Решение:** Координаты за пределами карты (0..39 для 40x40).
+**Fix:** Coordinates outside the map (0..39 for 40x40). Use `% Width` / `% Height` for toroidal wrap-around.
 
-## Интеграционное тестирование
+## Integration Testing
 
-Для проверки запустите сервер и подключите всех трёх клиентов одновременно:
+To test, start the server and connect all three clients simultaneously:
 
 ```bash
-# Терминал 1: сервер
+# Terminal 1: server
 cd twserver
-go run ./cmd/server
+./bin/server -config config.json
 
-# Терминал 2: Python клиент
+# Terminal 2: Python client
 cd twclients/python
-python main.py --server http://localhost:8080 --name "PythonBot"
+uv run python main.py --server http://localhost:8080 --name "PythonBot"
 
-# Терминал 3: C# клиент
+# Terminal 3: C# client
 cd twclients/csharp
 dotnet run -- --server http://localhost:8080 --name "CSBot"
 
-# Терминал 4: Go клиент
+# Terminal 4: Go client
 cd twclients/golang
-go run ./cmd/client --server http://localhost:8080 --name "GoBot"
+./client --server http://localhost:8080 --name "GoBot"
 ```
 
-Все три клиента должны зарегистрироваться, получать состояние игры, отправлять действия и дождаться завершения матча.
+All three clients should register, receive game state, send actions, and wait for the match to end.
 
-## Структура репозитория
+## Repository Structure
 
 ```
 twclients/
-├── README.md                    # Этот файл
+├── README.md                    # English version
+├── README.rus.md                # Russian version
+├── run.sh                       # Server + clients launch script
 ├── python/
 │   ├── README.md
 │   ├── pyproject.toml
@@ -275,10 +401,23 @@ twclients/
 │   ├── config.json
 │   ├── Program.cs
 │   ├── Models/
+│   │   ├── Observation.cs
+│   │   ├── Cell.cs
+│   │   ├── PublicPlayer.cs
+│   │   ├── Action.cs
+│   │   ├── ActionMessage.cs
+│   │   ├── JoinResponse.cs
+│   │   ├── ServerEvent.cs
+│   │   └── Result.cs
 │   ├── Api/
+│   │   └── GameApiClient.cs
 │   ├── Strategy/
+│   │   ├── IGameStrategy.cs
+│   │   └── SimpleStrategy.cs
 │   ├── Game/
+│   │   └── GameLoop.cs
 │   └── Tests/
+│       └── StrategyTests.cs
 └── golang/
     ├── README.md
     ├── go.mod
@@ -287,17 +426,23 @@ twclients/
     ├── cmd/client/main.go
     └── internal/
         ├── api/
+        │   └── client.go
         ├── models/
+        │   └── models.go
         ├── strategy/
+        │   ├── strategy.go
+        │   └── simple.go
         ├── game/
+        │   └── loop.go
         └── config/
+            └── config.go
 ```
 
-## Совместимость
+## Compatibility
 
-Все три клиента:
-- Используют один и тот же HTTP-протокол
-- Имеют одинаковые JSON-поля и типы данных
-- Работают с одним сервером без изменений
-- Поддерживают кроссплатформенный запуск (Windows, Linux, macOS)
-- Не требуют модификации серверной части
+All three clients:
+- Use the same HTTP protocol
+- Have identical JSON fields and data types
+- Work with one server without changes
+- Support cross-platform launch (Windows, Linux, macOS)
+- Do not require server-side modifications

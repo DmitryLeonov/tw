@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
 echo === Starting Territory Wars C# client ===
-dotnet run --project . -- --config config.json --name CSharpClient --strategy simple
+dotnet bin\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient --strategy simple

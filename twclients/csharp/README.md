@@ -4,17 +4,17 @@ A C# client for the Territory Wars game server, implementing an AI bot that play
 
 ## Purpose
 
-This client connects to a Territory Wars game server, receives game state observations, and submits strategic actions via WebSocket. It demonstrates how to build an AI agent for the game using C# and .NET 8.
+This client connects to a Territory Wars game server, receives game state observations via WebSocket, and submits strategic actions. It demonstrates how to build an AI agent for the game using C# and .NET 10.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
 │                    Program.cs                    │
-│  (Entry point, CLI args, DI setup, game loop)   │
+│  (Entry point, CLI args, registration, loop)    │
 ├─────────────────────────────────────────────────┤
 │                  GameLoop.cs                     │
-│  (Main game loop: observe → decide → submit)    │
+│  (WebSocket loop: receive → decide → submit)    │
 ├──────────────┬──────────────────────────────────┤
 │  Api/        │  Strategy/                        │
 │ GameApiClient│ IGameStrategy (interface)         │
@@ -24,25 +24,26 @@ This client connects to a Territory Wars game server, receives game state observ
 │  Observation, Cell, PublicPlayer, Action, etc.  │
 ├─────────────────────────────────────────────────┤
 │                  Tests/                          │
-│  StrategyTests (unit tests for SimpleStrategy)  │
+│  StrategyTests (unit tests, excluded from build)│
 └─────────────────────────────────────────────────┘
 ```
 
 ### Key Components
 
-- **Program.cs** — Entry point. Parses CLI arguments, builds configuration, sets up dependency injection, and starts the game loop with Ctrl+C handling.
-- **GameLoop.cs** — Core game loop. Fetches observations, delegates to the strategy, and submits actions.
-- **GameApiClient.cs** — HTTP and WebSocket client. Handles registration, state polling, leaderboard queries, and action submission.
+- **Program.cs** — Entry point. Parses CLI arguments, loads config, registers the player, connects WebSocket, and starts the game loop with Ctrl+C handling.
+- **GameLoop.cs** — Core game loop. Reads observations from WebSocket, delegates to the strategy, and submits actions.
+- **GameApiClient.cs** — HTTP and WebSocket client. Handles registration, action submission, and WebSocket connection management.
 - **IGameStrategy.cs** — Strategy interface. Defines how a bot decides its action each turn.
-- **SimpleStrategy.cs** — Default strategy implementation with basic territory expansion logic.
+- **SimpleStrategy.cs** — Default strategy: expand → attack → fortify → pass priority.
 - **Models/** — Data classes matching the server's JSON API contract.
-- **Tests/** — Unit tests for strategy logic.
+- **Tests/** — Unit tests for strategy logic (excluded from the main build).
 
 ## Installation
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (8.0.100 or later)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (10.0.0 or later)
+- `dotnet` on PATH (e.g. `/opt/dotnet`)
 
 ### Build
 
@@ -68,10 +69,28 @@ dotnet run -- --config config.json
 dotnet run -- --strategy Simple
 ```
 
-### Run Tests
+### Run All Clients (Go + Python + C#)
 
 ```bash
-dotnet test
+# Go clients
+cd /apps/tw/twclients/golang
+for i in 1 2 3 4 5; do
+  nohup ./client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+done
+
+# Python clients
+cd /apps/tw/twclients/python
+export PATH="/root/.local/bin:$PATH"
+for i in 1 2 3 4 5; do
+  nohup uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
+done
+
+# C# clients
+cd /apps/tw/twclients/csharp
+export PATH="/opt/dotnet:$PATH"
+for i in 1 2 3 4 5; do
+  nohup dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+done
 ```
 
 ## Usage Examples
@@ -84,47 +103,44 @@ dotnet run -- --server http://localhost:8080 --name TerritoryBot
 
 ### With Configuration File
 
-1. Copy the example config:
-   ```bash
-   # config.json уже содержит пример конфигурации
-   ```
+1. Edit `config.json`:
 
-2. Отредактируйте `config.json` с вашими настройками:
-   ```json
-   {
-     "ServerUrl": "http://game-server.example.com:8080",
-     "PlayerName": "MyAwesomeBot",
-     "HttpTimeoutSeconds": 15,
-     "LogLevel": "Debug",
-     "Strategy": "Simple"
-   }
-   ```
+```json
+{
+  "ServerUrl": "http://game-server.example.com:8080",
+  "PlayerName": "MyAwesomeBot",
+  "HttpTimeoutSeconds": 15,
+  "LogLevel": "Debug",
+  "Strategy": "Simple"
+}
+```
 
-3. Запуск:
-   ```bash
-   dotnet run -- --config config.json
-   ```
+2. Run:
+
+```bash
+dotnet run -- --config config.json
+```
 
 ### Command-Line Arguments
 
-| Argument   | Description                        | Default              |
-|------------|------------------------------------|----------------------|
-| `--server` | Game server HTTP URL               | From config file     |
-| `--name`   | Player name for registration       | From config file     |
-| `--config` | Путь к JSON файлу конфигурации     | `config.json`        |
-| `--strategy`| Strategy implementation to use   | `Simple`             |
+| Argument     | Description                        | Default           |
+|-------------|------------------------------------|-------------------|
+| `--server`  | Game server HTTP URL               | `http://localhost:8080` |
+| `--name`    | Player name for registration       | `StudentBot`      |
+| `--config`  | Path to JSON config file           | `config.json`     |
+| `--strategy`| Strategy implementation to use     | `Simple`          |
 
 ## Configuration
 
 ### config.json
 
-| Key                  | Type    | Description                          | Default          |
-|----------------------|---------|--------------------------------------|------------------|
+| Key                  | Type    | Description                          | Default             |
+|----------------------|---------|--------------------------------------|---------------------|
 | `ServerUrl`          | string  | Game server base URL                 | `http://localhost:8080` |
-| `PlayerName`         | string  | Display name for your bot            | `StudentBot`     |
-| `HttpTimeoutSeconds` | int     | HTTP request timeout in seconds      | `10`             |
+| `PlayerName`         | string  | Display name for your bot            | `StudentBot`        |
+| `HttpTimeoutSeconds` | int     | HTTP request timeout in seconds      | `10`                |
 | `LogLevel`           | string  | Logging level (Debug, Information, Warning, Error) | `Information` |
-| `Strategy`           | string  | Strategy to use (`Simple` or custom) | `Simple`         |
+| `Strategy`           | string  | Strategy to use (`Simple`)           | `Simple`            |
 
 ### Environment Variables
 
@@ -151,46 +167,42 @@ public class AggressiveStrategy : IGameStrategy
 {
     public Action Decide(Observation observation)
     {
-        var myPlayer = observation.Players.FirstOrDefault(p => p.PlayerId == observation.PlayerId);
-        if (myPlayer == null || myPlayer.Eliminated)
+        var owned = observation.GetOwnedCells();
+        if (owned == null || owned.Count == 0)
             return new Action { Type = "pass" };
 
-        // Find an adjacent enemy cell to attack
-        foreach (var cell in observation.Cells)
+        // Attack first, then expand, then fortify
+        foreach (var cell in owned)
         {
-            if (cell.Owner != observation.PlayerId && cell.Owner != "")
+            foreach (var neighbor in GetNeighbors(cell, observation.Width, observation.Height))
             {
-                // Check if we have a cell adjacent to this enemy
-                var adjacentOwn = observation.Cells.FirstOrDefault(c =>
-                    c.Owner == observation.PlayerId &&
-                    Math.Abs(c.X - cell.X) + Math.Abs(c.Y - cell.Y) == 1);
-
-                if (adjacentOwn != null && observation.Energy >= 1)
+                var target = observation.Cells.FirstOrDefault(c => c.X == neighbor.X && c.Y == neighbor.Y);
+                if (target != null && target.Owner != "" && target.Owner != observation.PlayerId)
                 {
-                    return new Action
+                    if (observation.Energy >= 2)
                     {
-                        Type = "attack",
-                        Target = new Point { X = cell.X, Y = cell.Y }
-                    };
+                        return new Action
+                        {
+                            Type = "attack",
+                            Target = new Point { X = neighbor.X, Y = neighbor.Y }
+                        };
+                    }
                 }
             }
         }
 
         // Fall back to expanding into neutral territory
-        foreach (var cell in observation.Cells)
+        foreach (var cell in owned)
         {
-            if (cell.Owner == "" && observation.Energy >= 1)
+            foreach (var neighbor in GetNeighbors(cell, observation.Width, observation.Height))
             {
-                var adjacentOwn = observation.Cells.FirstOrDefault(c =>
-                    c.Owner == observation.PlayerId &&
-                    Math.Abs(c.X - cell.X) + Math.Abs(c.Y - cell.Y) == 1);
-
-                if (adjacentOwn != null)
+                var target = observation.Cells.FirstOrDefault(c => c.X == neighbor.X && c.Y == neighbor.Y);
+                if (target != null && target.Owner == "" && observation.Energy >= 1)
                 {
                     return new Action
                     {
                         Type = "expand",
-                        Target = new Point { X = cell.X, Y = cell.Y }
+                        Target = new Point { X = neighbor.X, Y = neighbor.Y }
                     };
                 }
             }
@@ -198,18 +210,28 @@ public class AggressiveStrategy : IGameStrategy
 
         return new Action { Type = "pass" };
     }
+
+    private static IEnumerable<Point> GetNeighbors(Cell cell, int width, int height)
+    {
+        yield return new Point { X = (cell.X - 1 + width) % width, Y = cell.Y };
+        yield return new Point { X = (cell.X + 1 + width) % width, Y = cell.Y };
+        yield return new Point { X = cell.X, Y = (cell.Y - 1 + height) % height };
+        yield return new Point { X = cell.X, Y = (cell.Y + 1 + height) % height };
+    }
 }
 ```
 
 ### Step 2: Register Your Strategy
 
-In `Program.cs`, register your strategy:
+In `Program.cs`, add your strategy to the switch expression:
 
 ```csharp
-if (strategyName == "Aggressive")
+IGameStrategy strategy = strategyName.ToLower() switch
 {
-    services.AddSingleton<IGameStrategy, AggressiveStrategy>();
-}
+    "simple" => new SimpleStrategy(),
+    "aggressive" => new AggressiveStrategy(),
+    _ => throw new ArgumentException(...)
+};
 ```
 
 ### Step 3: Run with Your Strategy
@@ -222,12 +244,12 @@ dotnet run -- --strategy Aggressive
 
 ### Action Types
 
-| Action   | Description                              | Energy Cost |
-|----------|------------------------------------------|-------------|
-| `expand` | Claim a neutral cell adjacent to yours   | 1           |
-| `attack` | Attack an enemy cell adjacent to yours   | 1           |
-| `fortify` | Reinforce one of your own cells        | 1           |
-| `pass`   | Skip your turn                           | 0           |
+| Action    | Description                              | Energy Cost |
+|-----------|------------------------------------------|-------------|
+| `expand`  | Claim a neutral cell adjacent to yours   | 1           |
+| `attack`  | Attack an enemy cell adjacent to yours   | 2           |
+| `fortify` | Reinforce one of your own cells          | 2           |
+| `pass`    | Skip your turn                           | 0           |
 
 ### Cell Types
 
@@ -235,10 +257,12 @@ dotnet run -- --strategy Aggressive
 |--------|--------------------------------------|
 | `base` | Starting position, high health       |
 | `normal` | Regular territory cell             |
+| `resource` | Resource cell (marked visually)   |
 
 ### Movement Rules
 
 - Actions can only target cells **adjacent** (Manhattan distance = 1) to your owned cells.
+- The map is **toroidal** — coordinates wrap around using `% Width` and `% Height`.
 - You need sufficient **energy** to perform actions.
 - Each turn you submit **one action**.
 
@@ -250,7 +274,7 @@ dotnet run -- --strategy Aggressive
 WebSocket connection failed: Connection refused
 ```
 
-- Verify the server is running: `curl http://localhost:8080/api/v1/state`
+- Verify the server is running: `curl http://localhost:8080/health`
 - Check the `ServerUrl` in your config matches the server address.
 - Ensure no firewall is blocking the port.
 
@@ -288,17 +312,8 @@ WebSocket closed unexpectedly
 error NETSDK1004: File not found
 ```
 
-- Ensure .NET 8 SDK is installed: `dotnet --version`
+- Ensure .NET 10 SDK is installed: `dotnet --version`
 - Run `dotnet restore` to download packages.
-
-### Tests Failing
-
-```
-Test Run Failed
-```
-
-- Run with verbose output: `dotnet test --verbosity normal`
-- Check that the strategy logic handles all edge cases in the test suite.
 
 ## Project Structure
 
@@ -318,10 +333,12 @@ twclients/csharp/
 │   ├── PublicPlayer.cs           # Player info model
 │   ├── Action.cs                 # Action model
 │   ├── ActionMessage.cs          # WebSocket message model
-│   └── JoinResponse.cs           # Registration response model
+│   ├── JoinResponse.cs           # Registration response model
+│   ├── ServerEvent.cs            # Server event model
+│   └── Result.cs                 # API result model
 ├── Strategy/
 │   ├── IGameStrategy.cs          # Strategy interface
 │   └── SimpleStrategy.cs         # Default strategy
 └── Tests/
-    └── StrategyTests.cs          # Unit tests
+    └── StrategyTests.cs          # Unit tests (excluded from build)
 ```

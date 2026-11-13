@@ -55,11 +55,16 @@ var timeoutSeconds = int.Parse(
 var logLevel = configuration["LogLevel"]
                ?? "Information";
 
+var maxRetries = int.Parse(
+    configuration["MaxRetries"]
+    ?? "10");
+
 Console.WriteLine($"[CONFIG] Server: {baseUrl}");
 Console.WriteLine($"[CONFIG] Player: {name}");
 Console.WriteLine($"[CONFIG] Strategy: {strategyName}");
 Console.WriteLine($"[CONFIG] Timeout: {timeoutSeconds}s");
 Console.WriteLine($"[CONFIG] Log Level: {logLevel}");
+Console.WriteLine($"[CONFIG] Max Retries: {maxRetries}");
 
 // Create cancellation token for Ctrl+C handling
 var cts = new CancellationTokenSource();
@@ -92,7 +97,7 @@ var joinOptions = new System.Text.Json.JsonSerializerOptions
 };
 var joinJson = System.Text.Json.JsonSerializer.Serialize(joinPayload, joinOptions);
 var joinContent = new System.Net.Http.StringContent(joinJson, Encoding.UTF8);
-joinContent.Headers.ContentType.MediaType = "application/json";
+joinContent.Headers.ContentType!.MediaType = "application/json";
 
 var joinResponse = await httpClient.PostAsync(
     $"{baseUrl}/api/v1/join", joinContent, cts.Token);
@@ -119,7 +124,7 @@ var apiClient = new GameApiClient(
 await apiClient.ConnectWebSocketAsync(cts.Token);
 
 // Create and run game loop
-var gameLoop = new GameLoop(apiClient, strategy);
+var gameLoop = new GameLoop(apiClient, strategy, maxRetries);
 await gameLoop.RunAsync(cts.Token);
 
 // Cleanup

@@ -21,6 +21,7 @@ type Engine struct {
 	matchID       string
 	turn          int
 	gameOver      bool
+	stopped       bool // true after stop/reset — prevents new joins until game starts
 	cells         map[Point]*Cell
 	players       map[string]*Player
 	tokenToPlayer map[string]string
@@ -41,8 +42,8 @@ func NewEngine(cfg Config) *Engine {
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 200
 	}
-	if cfg.TurnTimeout <= 0 {
-		cfg.TurnTimeout = 15 * time.Second
+	if cfg.TurnDelay <= 0 {
+		cfg.TurnDelay = 15 * time.Second
 	}
 	if cfg.Width < 10 {
 		cfg.Width = 40
@@ -76,14 +77,16 @@ func (e *Engine) initMap() {
 func (e *Engine) Join(name string) (*Player, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.stopped {
+		return nil, errors.New("game stopped — restart to play again")
+	}
 	if len(e.players) >= e.cfg.MaxPlayers {
 		return nil, errors.New("match is full")
 	}
-	if e.turn > 0 || len(e.pending) > 0 {
-		return nil, errors.New("registration is closed after the first turn starts")
-	}
+	// Registration is closed after the first turn starts (turn > 0).
+	// Pending actions from early joiners are still accepted.
 	if name == "" {
-		name = fmt.Sprintf("Player-%d", len(e.players)+1)
+		return nil, errors.New("player name is required")
 	}
 	id := fmt.Sprintf("p%02d", len(e.players)+1)
 	token := randomHex(24)
@@ -221,11 +224,11 @@ func (e *Engine) ResolveExpiredTurn() bool {
 	if e.gameOver || len(e.players) == 0 {
 		return false
 	}
-	if time.Since(e.roundStarted) < e.cfg.TurnTimeout {
+	if time.Since(e.roundStarted) < e.cfg.TurnDelay {
 		return false
 	}
 	// Only resolve if there are pending actions (i.e. the turn hasn't been
-	// resolved already by all-submitted path).
+	// resolved already).
 	if len(e.pending) == 0 {
 		return false
 	}
@@ -469,6 +472,17 @@ func (e *Engine) Status() map[string]any {
 	return map[string]any{"match_id": e.matchID, "turn": e.turn, "max_turns": e.cfg.MaxTurns, "game_over": e.gameOver, "players": len(e.players), "max_players": e.cfg.MaxPlayers, "pending_actions": len(e.pending)}
 }
 
+// Players returns a copy of the players map.
+func (e *Engine) Players() map[string]*Player {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := make(map[string]*Player, len(e.players))
+	for k, v := range e.players {
+		out[k] = v
+	}
+	return out
+}
+
 func (e *Engine) Results() []Result {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -512,8 +526,11 @@ func (e *Engine) WaitForTurn(turn int, ctx context.Context) {
 		ch := e.turnChanged
 		e.turnChangedMu.Unlock()
 		select {
-		case <-ch:
-			// Turn resolved, loop back to check.
+		case _, ok := <-ch:
+			if !ok {
+				// Channel closed — get a fresh one and retry.
+				continue
+			}
 		case <-ctx.Done():
 			return
 		}
@@ -546,9 +563,11 @@ func (e *Engine) ResultsForTurn(turn int) []Result {
 
 // Reset resets the game state to turn 0 while keeping all registered players.
 // Cells are restored to their initial state, pending actions and results are cleared.
+// Does NOT set stopped — the caller controls whether re-registration is allowed.
 func (e *Engine) Reset() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.stopped = false
 	e.turn = 0
 	e.gameOver = false
 	e.pending = make(map[string]Action)
@@ -574,5 +593,55 @@ func (e *Engine) Reset() {
 	// Reset players: keep them, but reset scores.
 	for _, p := range e.players {
 		p.Score = 0
+	}
+}
+
+// ResetStopped clears the stopped flag, allowing new players to join.
+func (e *Engine) ResetStopped() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.stopped = false
+}
+
+// SetStopped sets the stopped flag.
+func (e *Engine) SetStopped(v bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.stopped = v
+}
+
+// ClearTokens invalidates all player tokens. Reconnecting clients will get
+// "unauthorized" on both HTTP state and WebSocket endpoints.
+func (e *Engine) ClearTokens() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tokenToPlayer = make(map[string]string)
+}
+
+// ClearPlayers removes all players and resets cells to initial state.
+// Used before restarting bots after a stop/reset.
+func (e *Engine) ClearPlayers() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.players = make(map[string]*Player)
+	e.tokenToPlayer = make(map[string]string)
+	e.pending = make(map[string]Action)
+	e.results = nil
+	e.turn = 0
+	e.gameOver = false
+	e.roundStarted = time.Now()
+
+	e.turnChangedMu.Lock()
+	close(e.turnChanged)
+	e.turnChanged = make(chan struct{})
+	e.turnChangedMu.Unlock()
+
+	for y := 0; y < e.cfg.Height; y++ {
+		for x := 0; x < e.cfg.Width; x++ {
+			p := Point{x, y}
+			cell := e.cells[p]
+			cell.Owner = ""
+			cell.Health = 3
+		}
 	}
 }

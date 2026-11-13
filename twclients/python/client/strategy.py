@@ -78,9 +78,7 @@ class SimpleStrategy(IGameStrategy):
         """Find an adjacent neutral cell to expand into."""
         cell_set = {(c.x, c.y) for c in owned}
         for cell in owned:
-            for neighbor in self._neighbors(cell):
-                if not observation.is_valid_coord(neighbor.x, neighbor.y):
-                    continue
+            for neighbor in self._neighbors(cell, observation.width, observation.height):
                 if (neighbor.x, neighbor.y) in cell_set:
                     continue
                 # Check if neutral (no owner)
@@ -97,9 +95,7 @@ class SimpleStrategy(IGameStrategy):
     ) -> Optional[Point]:
         """Find an adjacent enemy cell to attack."""
         for cell in owned:
-            for neighbor in self._neighbors(cell):
-                if not observation.is_valid_coord(neighbor.x, neighbor.y):
-                    continue
+            for neighbor in self._neighbors(cell, observation.width, observation.height):
                 cell_data = next(
                     (c for c in observation.cells if c.x == neighbor.x and c.y == neighbor.y),
                     None,
@@ -120,13 +116,13 @@ class SimpleStrategy(IGameStrategy):
         return Point(x=weakest.x, y=weakest.y)
 
     @staticmethod
-    def _neighbors(cell: Cell) -> List[Point]:
-        """Return the four cardinal neighbors of a cell."""
+    def _neighbors(cell: Cell, width: int = 40, height: int = 40) -> List[Point]:
+        """Return the four cardinal neighbors of a cell (with toroidal wrap-around)."""
         return [
-            Point(cell.x - 1, cell.y),
-            Point(cell.x + 1, cell.y),
-            Point(cell.x, cell.y - 1),
-            Point(cell.x, cell.y + 1),
+            Point((cell.x - 1 + width) % width, cell.y),
+            Point((cell.x + 1 + width) % width, cell.y),
+            Point(cell.x, (cell.y - 1 + height) % height),
+            Point(cell.x, (cell.y + 1 + height) % height),
         ]
 
 
@@ -162,9 +158,7 @@ class AggressiveStrategy(IGameStrategy):
         self, observation: Observation, owned: List[Cell]
     ) -> Optional[Point]:
         for cell in owned:
-            for neighbor in SimpleStrategy._neighbors(cell):
-                if not observation.is_valid_coord(neighbor.x, neighbor.y):
-                    continue
+            for neighbor in SimpleStrategy._neighbors(cell, observation.width, observation.height):
                 cell_data = next(
                     (c for c in observation.cells if c.x == neighbor.x and c.y == neighbor.y),
                     None,
@@ -178,9 +172,7 @@ class AggressiveStrategy(IGameStrategy):
     ) -> Optional[Point]:
         cell_set = {(c.x, c.y) for c in owned}
         for cell in owned:
-            for neighbor in SimpleStrategy._neighbors(cell):
-                if not observation.is_valid_coord(neighbor.x, neighbor.y):
-                    continue
+            for neighbor in SimpleStrategy._neighbors(cell, observation.width, observation.height):
                 if (neighbor.x, neighbor.y) in cell_set:
                     continue
                 cell_data = next(

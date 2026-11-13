@@ -3,5 +3,6 @@
   "player_name": "StudentBot",
   "http_timeout": 10,
   "log_level": "INFO",
-  "strategy": "simple"
+  "strategy": "simple",
+  "max_retries": 10
 }

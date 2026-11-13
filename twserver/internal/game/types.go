@@ -5,7 +5,7 @@ import "time"
 type Config struct {
 	MaxPlayers    int
 	MaxTurns      int
-	TurnTimeout   time.Duration
+	TurnDelay     time.Duration
 	Width         int
 	Height        int
 	MarkRate      int

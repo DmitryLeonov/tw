@@ -24,6 +24,7 @@ type Client struct {
 	httpClient *http.Client
 	token      string
 	wsURL      string
+	playerName string
 	logger     *slog.Logger
 }
 
@@ -80,6 +81,7 @@ func (c *Client) Join(ctx context.Context, name string) (*models.JoinResponse, e
 
 	c.token = joinResp.Token
 	c.wsURL = joinResp.WebsocketURL
+	c.playerName = name
 
 	return &joinResp, nil
 }
@@ -222,6 +224,12 @@ func (c *Client) ConnectWebSocket(ctx context.Context) (*websocket.Conn, error) 
 		return nil, fmt.Errorf("WebSocket dial failed: %w", err)
 	}
 
+	// Respond to server pings with pongs so the server doesn't
+	// close the connection due to read deadline expiry.
+	conn.SetPingHandler(func(message string) error {
+		return conn.WriteMessage(websocket.PongMessage, []byte(message))
+	})
+
 	return conn, nil
 }
 
@@ -244,4 +252,24 @@ func BuildActionMessage(turn int, action *models.Action) models.ActionMessage {
 // Close releases any resources held by the client.
 func (c *Client) Close() {
 	c.httpClient.CloseIdleConnections()
+}
+
+// BaseURL returns the server base URL.
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
+// PlayerName returns the player name (used for re-joining).
+func (c *Client) PlayerName() string {
+	return c.playerName
+}
+
+// UpdateToken sets a new authentication token.
+func (c *Client) UpdateToken(token string) {
+	c.token = token
+}
+
+// UpdateWSURL sets a new WebSocket URL.
+func (c *Client) UpdateWSURL(wsURL string) {
+	c.wsURL = wsURL
 }

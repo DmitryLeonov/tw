@@ -3,5 +3,6 @@
   "PlayerName": "StudentBot",
   "HttpTimeoutSeconds": 10,
   "LogLevel": "Information",
-  "Strategy": "Simple"
+  "Strategy": "Simple",
+  "MaxRetries": 10
 }

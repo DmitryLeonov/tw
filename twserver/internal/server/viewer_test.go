@@ -17,12 +17,12 @@ func newTestViewerServer(t *testing.T) (*Viewer, *httptest.Server, func()) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
+	bm := NewBotManager(engine, rm, nil)
 	v := NewViewer(engine, bm)
 
 	mux := http.NewServeMux()
@@ -257,12 +257,12 @@ func TestBuildViewerState(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
+	bm := NewBotManager(engine, rm, nil)
 	v := NewViewer(engine, bm)
 
 	// Join a player so leaderboard is non-empty.
@@ -295,12 +295,12 @@ func TestBuildViewerState_GameOver(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  2,
 		MaxTurns:    2,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       10,
 		Height:      10,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
+	bm := NewBotManager(engine, rm, nil)
 	v := NewViewer(engine, bm)
 
 	p1, _ := engine.Join("P1")
@@ -331,22 +331,22 @@ func TestViewerWithBots(t *testing.T) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  6,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
-	bm := NewBotManager(engine, rm, 0)
+
+	// Pre-build bot agents.
+	agents, err := BuildBotList(true, 6)
+	if err != nil {
+		t.Fatalf("BuildBotList: %v", err)
+	}
+	bm := NewBotManager(engine, rm, agents)
 	v := NewViewer(engine, bm)
 
 	// Start bots.
-	agents, _ := BuildBotList(BotConfig{
-		Enabled:         true,
-		Count:           2,
-		DefaultStrategy: StrategyRandom,
-		Seed:            42,
-	}, 6)
-	err := bm.StartBots(agents, 2*time.Second)
+	err = bm.StartBotsOnDemand(2)
 	if err != nil {
 		t.Fatalf("StartBots: %v", err)
 	}

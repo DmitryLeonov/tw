@@ -74,7 +74,8 @@ class GameApiClient:
 
     def get_observation(self) -> Observation:
         """Fetch the latest observation for the current player."""
-        resp = self._http_client.get(f"{self.base_url}/api/v1/observation")
+        headers = {"Authorization": f"Bearer {self.token}"}
+        resp = self._http_client.get(f"{self.base_url}/api/v1/state", headers=headers)
         if resp.status_code == 200:
             data = resp.json()
             return Observation.from_dict(data)
@@ -97,9 +98,21 @@ class GameApiClient:
         The connection URL is built from the base_url and the websocket_url
         returned during registration.
         """
+        # Close any existing WebSocket before connecting (prevents stale connections).
+        if self._ws is not None:
+            try:
+                await self._ws.close()
+            except Exception:
+                pass
+            self._ws = None
+        
         ws_url = self._build_ws_url()
         logger.info("Connecting to WebSocket %s", ws_url)
-        ws = await websockets.connect(ws_url)
+        ws = await websockets.connect(
+            ws_url,
+            ping_interval=20,
+            ping_timeout=10,
+        )
         self._ws = ws
         return ws
 
@@ -131,6 +144,23 @@ class GameApiClient:
             return None
         try:
             raw = await asyncio.wait_for(self._ws.recv(), timeout=timeout or 30.0)
+            return Event.from_json(raw)
+        except asyncio.TimeoutError:
+            return None
+        except websockets.exceptions.ConnectionClosed as exc:
+            logger.warning("WebSocket closed: %s", exc)
+            self._ws = None
+            return None
+
+    async def wait_for_event(self, timeout: float = 5.0) -> Optional[Event]:
+        """Wait for a single WebSocket event with a short timeout.
+
+        Used by the game loop to poll for events without blocking for too long.
+        """
+        if self._ws is None:
+            return None
+        try:
+            raw = await asyncio.wait_for(self._ws.recv(), timeout=timeout)
             return Event.from_json(raw)
         except asyncio.TimeoutError:
             return None

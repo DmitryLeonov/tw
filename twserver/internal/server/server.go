@@ -28,9 +28,8 @@ type Server struct {
 func New(e *game.Engine) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	gameStarted := make(chan struct{})
-	close(gameStarted) // immediate start for non-config mode
 	rm := NewRoundManager(e, gameStarted)
-	bm := NewBotManager(e, rm, 0)
+	bm := NewBotManager(e, rm, nil)
 	v := NewViewer(e, bm)
 
 	return &Server{
@@ -45,28 +44,9 @@ func New(e *game.Engine) *Server {
 }
 
 // NewWithConfig creates a Server with full configuration, including bot setup.
+// Bots are NOT started here — they are started on demand via Start().
 func NewWithConfig(e *game.Engine, cfg *GameConfig) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-
-	turnTimeout := time.Duration(intEnvDefault("TURN_TIMEOUT_SECONDS", 15)) * time.Second
-	if tt := cfg.TurnTimeout; tt != "" {
-		if d, err := time.ParseDuration(tt); err == nil {
-			turnTimeout = d
-		}
-	}
-	turnDelay := time.Duration(intEnvDefault("TURN_DELAY_SECONDS", 5)) * time.Second
-	if td := cfg.Bots.TurnDelay; td != "" {
-		if d, err := time.ParseDuration(td); err == nil {
-			turnDelay = d
-		}
-	}
-
-	regDelay := time.Duration(intEnvDefault("REGISTRATION_DELAY_SECONDS", 60)) * time.Second
-	if rd := cfg.RegistrationDelay; rd != "" {
-		if d, err := time.ParseDuration(rd); err == nil {
-			regDelay = d
-		}
-	}
 
 	gameStarted := make(chan struct{})
 	rm := NewRoundManager(e, gameStarted)
@@ -75,7 +55,14 @@ func NewWithConfig(e *game.Engine, cfg *GameConfig) *Server {
 		resultsDir = rd
 	}
 	rm.SetResultsDir(resultsDir)
-	bm := NewBotManager(e, rm, turnDelay)
+
+	// Pre-build bot agents from config (but don't start them yet).
+	var agents []PlayerAgent
+	if cfg.BotsEnabled {
+		agents, _ = BuildBotList(cfg.BotsEnabled, cfg.MaxPlayers)
+	}
+
+	bm := NewBotManager(e, rm, agents)
 	v := NewViewer(e, bm)
 
 	s := &Server{
@@ -89,60 +76,7 @@ func NewWithConfig(e *game.Engine, cfg *GameConfig) *Server {
 		gameStarted:    gameStarted,
 	}
 
-	// Start viewer monitoring.
 	v.StartMonitoring(ctx)
-
-	// Register and start bots if enabled.
-	if cfg.Bots.Enabled {
-		agents, err := BuildBotList(cfg.Bots, cfg.MaxPlayers)
-		if err != nil {
-			log.Printf("Warning: failed to build bot list: %v", err)
-		} else if len(agents) > 0 {
-			// Register all bots with the engine first.
-			type botReg struct {
-				agent PlayerAgent
-				pid   string
-			}
-			var registered []botReg
-			for _, agent := range agents {
-				player, err := e.Join(agent.Name())
-				if err != nil {
-					log.Printf("Warning: failed to register bot %s: %v", agent.Name(), err)
-					continue
-				}
-				outbound := rm.Connect(nil, player.ID)
-				// Drain outbound events — bots don't need them.
-				go func(ch chan game.Event) {
-					for range ch {
-					}
-				}(outbound)
-				registered = append(registered, botReg{agent, player.ID})
-			}
-			// Then start bot decision loops.
-			for _, br := range registered {
-				go func(agent PlayerAgent, pid string) {
-					bp := newBotPlayer(agent, pid, rm, e, turnTimeout, bm.logger, turnDelay)
-					bp.Run(ctx)
-				}(br.agent, br.pid)
-			}
-			// Register bots with BotManager so viewer can identify them.
-			for _, br := range registered {
-				bm.RegisterBot(br.pid)
-			}
-		}
-	}
-
-	// Start registration delay timer — game begins after delay or manual start.
-	go func() {
-		time.Sleep(regDelay)
-		log.Printf("Registration delay expired — starting game")
-		select {
-		case <-s.gameStarted:
-			// already started
-		default:
-			close(s.gameStarted)
-		}
-	}()
 
 	return s
 }
@@ -152,6 +86,51 @@ func (s *Server) Shutdown() {
 	s.shutdownCancel()
 	s.botManager.Shutdown()
 	s.rounds.Shutdown()
+}
+
+// Stop stops the game — invalidates all tokens, disconnects clients, resets state.
+// Clients reconnecting with old tokens get "unauthorized"; after max_retries they exit.
+func (s *Server) Stop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	log.Printf("Game stopped via /api/v1/stop — invalidating tokens and disconnecting clients")
+
+	// 0. Invalidate all tokens so reconnecting clients get "unauthorized".
+	s.engine.ClearTokens()
+
+	// 1. Close all WS connections (no GAME_OVER needed — clients exit on reconnect auth failure).
+	s.rounds.cleanupAll()
+
+	// 2. Cancel shutdown context to stop Viewer monitoring goroutine.
+	s.shutdownCancel()
+
+	// 3. Stop the RoundManager event loop.
+	s.rounds.Stop()
+
+	// 4. Reset engine state.
+	s.engine.Reset()
+	s.engine.ResetStopped()
+	s.engine.ClearPlayers()
+
+	// 5. Create a fresh gameStarted channel.
+	s.ResetGameStarted()
+
+	// 6. Shutdown old bots.
+	s.botManager.Shutdown()
+	s.botManager.ResetContext()
+
+	// 7. Restart the RoundManager event loop.
+	s.rounds.Restart()
+
+	// 8. Recreate shutdown context and restart Viewer monitoring.
+	ctx, cancel := context.WithCancel(context.Background())
+	s.shutdownCtx = ctx
+	s.shutdownCancel = cancel
+	s.viewer.StartMonitoring(ctx)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "game stopped"})
 }
 
 // Pause stops the event loop from processing actions and advancing turns.
@@ -165,9 +144,13 @@ func (s *Server) Resume() {
 }
 
 // ResetGameStarted resets the engine and goes back to waiting mode.
+// Creates a fresh gameStarted channel shared between Server and RoundManager
+// so that StartGame() can close it again after a stop/reset.
 func (s *Server) ResetGameStarted() {
 	s.engine.Reset()
-	s.rounds.ResetGameStarted()
+	ch := make(chan struct{})
+	s.rounds.SetGameStarted(ch)
+	s.gameStarted = ch
 }
 
 // GetViewer returns the Viewer instance, or nil if not configured.
@@ -182,12 +165,29 @@ func (s *Server) GetBotManager() *BotManager {
 
 // StartGame manually starts the game (unblocks the registration delay).
 // Returns true if the game was not already started.
+// Also spawns bots to fill remaining player slots.
 func (s *Server) StartGame() bool {
 	select {
 	case <-s.gameStarted:
-		return false // already started
+		s.engine.ResetStopped()
+		return false
 	default:
 		close(s.gameStarted)
+		s.engine.ResetStopped()
+
+		// Spawn bots to fill remaining player slots.
+		if s.config == nil {
+			return true
+		}
+		humanCount := s.botManager.HumanPlayerCount()
+		botCount := s.config.MaxPlayers - humanCount
+		if botCount > 0 && s.config.BotsEnabled {
+			log.Printf("Starting %d bots (human players: %d, max: %d)", botCount, humanCount, s.config.MaxPlayers)
+			if err := s.botManager.StartBotsOnDemand(botCount); err != nil {
+				log.Printf("Warning: failed to start bots: %v", err)
+			}
+		}
+
 		return true
 	}
 }
@@ -288,8 +288,6 @@ func (s *Server) WebSocket(w http.ResponseWriter, r *http.Request) {
 
 	s.engine.SetConnected(p.ID, true)
 
-	// Connect registers the connection with the Round Manager and returns
-	// the outbound event channel. It also assigns a generation number.
 	outbound := s.rounds.Connect(conn, p.ID)
 	gen := s.rounds.Generation(p.ID)
 
@@ -299,8 +297,6 @@ func (s *Server) WebSocket(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 	}()
 
-	// Writer goroutine: reads events from the Round Manager and writes them
-	// to the WebSocket connection. One writer per connection.
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
@@ -327,12 +323,10 @@ func (s *Server) WebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Reader goroutine: reads actions from the WebSocket and sends them
-	// to the Round Manager's event loop. One reader per connection.
 	conn.SetReadLimit(64 * 1024)
-	_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	// Reset read deadline on pong (keeps connection alive during inactivity).
 	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 	})
 
 	for {
@@ -340,7 +334,6 @@ func (s *Server) WebSocket(w http.ResponseWriter, r *http.Request) {
 		if err := conn.ReadJSON(&msg); err != nil {
 			return
 		}
-		// Send action to the Round Manager's event loop for processing.
 		s.rounds.SubmitAction(p.ID, msg, outbound)
 	}
 }

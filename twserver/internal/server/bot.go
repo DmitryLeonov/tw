@@ -29,13 +29,11 @@ type PlayerAgent interface {
 // It receives observations, calls Decide(), and submits the action back
 // through the RoundManager's event loop.
 type botPlayer struct {
-	agent           PlayerAgent
-	playerID        string
-	roundManager    *RoundManager
-	engine          *game.Engine
-	decisionTimeout time.Duration
-	logger          *botLogger
-	turnDelay       time.Duration
+	agent      PlayerAgent
+	playerID   string
+	roundManager *RoundManager
+	engine     *game.Engine
+	logger     *botLogger
 }
 
 // botLogger records bot actions and results for the viewer history.
@@ -68,38 +66,34 @@ func (bl *botLogger) Entries() []BotLogEntry {
 	return out
 }
 
-func newBotPlayer(agent PlayerAgent, playerID string, rm *RoundManager, engine *game.Engine, timeout time.Duration, logger *botLogger, turnDelay time.Duration) *botPlayer {
+func newBotPlayer(agent PlayerAgent, playerID string, rm *RoundManager, engine *game.Engine, timeout time.Duration, logger *botLogger, turnDelay time.Duration, gameStarted <-chan struct{}) *botPlayer {
 	return &botPlayer{
 		agent:           agent,
 		playerID:        playerID,
 		roundManager:    rm,
 		engine:          engine,
-		decisionTimeout: timeout,
 		logger:          logger,
-		turnDelay:       turnDelay,
 	}
 }
 
-// Run starts the bot's decision loop. It runs until the context is cancelled
-// or the game ends. Each iteration: get observation → decide → submit action.
+// Run starts the bot's decision loop. One observation/decision/submit per turn.
 func (bp *botPlayer) Run(ctx context.Context) {
-	// Mark bot as connected.
 	bp.engine.SetConnected(bp.playerID, true)
+	defer bp.engine.SetConnected(bp.playerID, false)
 
+	turnCount := 0
 	for {
 		select {
 		case <-ctx.Done():
-			bp.engine.SetConnected(bp.playerID, false)
 			return
 		default:
 		}
 
-		// Check if game is over.
 		if bp.engine.IsGameOver() {
 			return
 		}
 
-		// Get observation.
+		// Observation once per turn — provides expand/attack/fortify targets.
 		obs, err := bp.engine.Observation(bp.playerID)
 		if err != nil {
 			bp.logger.Log(BotLogEntry{
@@ -109,30 +103,21 @@ func (bp *botPlayer) Run(ctx context.Context) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-
-		// Check if game is over after observation.
 		if obs.GameOver {
 			return
 		}
 
-		// Decide action with timeout.
-		decideCtx, cancel := context.WithTimeout(ctx, bp.decisionTimeout)
-		action, err := bp.agent.Decide(decideCtx, obs)
-		cancel()
+		// (no debug logging)
 
+		action, err := bp.agent.Decide(ctx, obs)
 		if err != nil {
 			bp.logger.Log(BotLogEntry{
-				Turn: obs.Turn, PlayerID: bp.playerID, PlayerName: bp.agent.Name(),
+				Turn:  obs.Turn, PlayerID: bp.playerID, PlayerName: bp.agent.Name(),
 				ActionType: "error", Accepted: false, Reason: err.Error(),
 			})
-			// On decision error, pass instead.
 			action = &game.Action{Type: "pass"}
 		}
 
-		// Staggered delay so the viewer has something to watch.
-		time.Sleep(bp.turnDelay)
-
-		// Submit action through RoundManager.
 		msg := game.ActionMessage{
 			Type:    "ACTION",
 			Turn:    obs.Turn,
@@ -140,14 +125,14 @@ func (bp *botPlayer) Run(ctx context.Context) {
 		}
 		bp.roundManager.SubmitAction(bp.playerID, msg, nil)
 
-		// Log the action.
 		bp.logger.Log(BotLogEntry{
 			Turn: obs.Turn, PlayerID: bp.playerID, PlayerName: bp.agent.Name(),
 			ActionType: action.Type, Accepted: true,
 		})
 
-		// Wait for turn resolution before next decision.
+		// Block until the next turn starts.
 		bp.engine.WaitForTurn(obs.Turn, ctx)
+		turnCount++
 	}
 }
 
@@ -331,6 +316,37 @@ func (b *expansionBot) Decide(ctx context.Context, obs *game.Observation) (*game
 	}
 }
 
+// simpleBot follows a deterministic priority: attack > expand > fortify > pass.
+// It always picks the first available target from the server's pre-computed lists,
+// which already account for toroidal wrap-around.
+// Priority matches the C# SimpleStrategy client for comparable scores.
+type simpleBot struct {
+	name string
+}
+
+func (b *simpleBot) Name() string     { return b.name }
+func (b *simpleBot) Strategy() string { return "simple" }
+
+func (b *simpleBot) Decide(ctx context.Context, obs *game.Observation) (*game.Action, error) {
+	// Priority 1: Attack adjacent enemy cell (costs 2 energy, gives +3 score).
+	if obs.Energy >= 2 && len(obs.AttackTargets) > 0 {
+		return &game.Action{Type: "attack", Target: &obs.AttackTargets[0]}, nil
+	}
+
+	// Priority 2: Expand into adjacent neutral cell (costs 1 energy, gives +1 score).
+	if obs.Energy >= 1 && len(obs.ExpandTargets) > 0 {
+		return &game.Action{Type: "expand", Target: &obs.ExpandTargets[0]}, nil
+	}
+
+	// Priority 3: Fortify weakest cell (costs 2 energy).
+	if obs.Energy >= 2 && len(obs.FortifyTargets) > 0 {
+		return &game.Action{Type: "fortify", Target: &obs.FortifyTargets[0]}, nil
+	}
+
+	// No valid action.
+	return &game.Action{Type: "pass"}, nil
+}
+
 // CreateBot creates a PlayerAgent from a strategy name.
 func CreateBot(name string, strategy BotStrategy, seed int64) (PlayerAgent, error) {
 	rng := rand.New(rand.NewSource(seed))
@@ -343,6 +359,8 @@ func CreateBot(name string, strategy BotStrategy, seed int64) (PlayerAgent, erro
 		return &defensiveBot{name: name, rng: rng}, nil
 	case StrategyExpansion:
 		return &expansionBot{name: name, rng: rng}, nil
+	case StrategySimple:
+		return &simpleBot{name: name}, nil
 	default:
 		return nil, fmt.Errorf("unknown bot strategy: %s", strategy)
 	}

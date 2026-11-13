@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"twserver/internal/game"
 )
@@ -22,11 +21,12 @@ type BotManager struct {
 	cancel       context.CancelFunc
 	wg           sync.WaitGroup
 	botIDs       map[string]bool
-	turnDelay    time.Duration
+	agents       []PlayerAgent // pre-built agent list from config
 }
 
-// NewBotManager creates a new BotManager.
-func NewBotManager(engine *game.Engine, rm *RoundManager, turnDelay time.Duration) *BotManager {
+// NewBotManager creates a new BotManager with a pre-built list of agents.
+// Bots are NOT started here — they are started on demand via StartBotsOnDemand.
+func NewBotManager(engine *game.Engine, rm *RoundManager, agents []PlayerAgent) *BotManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &BotManager{
 		engine:       engine,
@@ -35,37 +35,59 @@ func NewBotManager(engine *game.Engine, rm *RoundManager, turnDelay time.Duratio
 		ctx:          ctx,
 		cancel:       cancel,
 		botIDs:       make(map[string]bool),
-		turnDelay:    turnDelay,
+		agents:       agents,
 	}
 }
 
-// StartBots registers the given agents as players in the engine,
-// connects them to the RoundManager, and starts their decision loops.
-// Returns an error if registration fails (e.g., match is full).
-func (bm *BotManager) StartBots(agents []PlayerAgent, decisionTimeout time.Duration) error {
+// Shutdown stops all bots and waits for their loops to finish.
+// After Shutdown, a new context must be created via ResetContext() before
+// calling StartBotsOnDemand again.
+func (bm *BotManager) Shutdown() {
+	bm.cancel()
+	bm.wg.Wait()
+	bm.mu.Lock()
+	bm.bots = nil
+	bm.botIDs = make(map[string]bool)
+	bm.mu.Unlock()
+}
+
+// ResetContext creates a fresh context for bots after Shutdown.
+func (bm *BotManager) ResetContext() {
+	ctx, cancel := context.WithCancel(context.Background())
+	bm.ctx = ctx
+	bm.cancel = cancel
+}
+
+// StartBotsOnDemand registers `count` bots from the pre-built agent list.
+// Bots start playing immediately.
+func (bm *BotManager) StartBotsOnDemand(count int) error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
+	if count <= 0 || len(bm.agents) == 0 {
+		return nil
+	}
+
+	// Take only the first `count` agents.
+	agents := bm.agents[:count]
+
 	for i, agent := range agents {
-		// Register with engine.
 		player, err := bm.engine.Join(agent.Name())
 		if err != nil {
-			// Rollback previously registered bots.
+			// Roll back already-registered bots.
 			for j := 0; j < i; j++ {
 				bm.bots[j].roundManager.Disconnect(bm.bots[j].playerID, 0)
 			}
 			return fmt.Errorf("failed to register bot %s: %w", agent.Name(), err)
 		}
 
-		// Connect to RoundManager.
 		outbound := bm.roundManager.Connect(nil, player.ID)
-		_ = outbound // bots don't need outbound events for decision loop
+		_ = outbound
 
-		// Create bot player wrapper.
-		bp := newBotPlayer(agent, player.ID, bm.roundManager, bm.engine, decisionTimeout, bm.logger, bm.turnDelay)
+		bp := newBotPlayer(agent, player.ID, bm.roundManager, bm.engine, 0, bm.logger, 0, nil)
 		bm.bots = append(bm.bots, bp)
+		bm.botIDs[player.ID] = true
 
-		// Start decision loop.
 		bm.wg.Add(1)
 		go func(bp *botPlayer) {
 			defer bm.wg.Done()
@@ -76,10 +98,11 @@ func (bm *BotManager) StartBots(agents []PlayerAgent, decisionTimeout time.Durat
 	return nil
 }
 
-// Shutdown stops all bots and waits for their loops to finish.
-func (bm *BotManager) Shutdown() {
-	bm.cancel()
-	bm.wg.Wait()
+// HumanPlayerCount returns the number of non-bot players currently in the engine.
+func (bm *BotManager) HumanPlayerCount() int {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	return len(bm.engine.Players()) - len(bm.botIDs)
 }
 
 // LogEntries returns all bot action log entries.
@@ -96,13 +119,6 @@ func (bm *BotManager) Count() int {
 	return len(bm.bots)
 }
 
-// RegisterBot registers a bot player with the BotManager so the viewer can identify it.
-func (bm *BotManager) RegisterBot(playerID string) {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-	bm.botIDs[playerID] = true
-}
-
 // BotIDs returns the set of player IDs that belong to bots.
 func (bm *BotManager) BotIDs() map[string]bool {
 	bm.mu.Lock()
@@ -114,46 +130,30 @@ func (bm *BotManager) BotIDs() map[string]bool {
 	return out
 }
 
-// BuildBotList creates a list of PlayerAgents from BotConfig.
-func BuildBotList(cfg BotConfig, maxPlayers int) ([]PlayerAgent, error) {
-	if !cfg.Enabled {
+// BuildBotList creates a list of PlayerAgents for bots.
+// Strategies rotate through the 5 available types.
+// Each bot gets a unique seed = baseSeed + index.
+func BuildBotList(botsEnabled bool, maxPlayers int) ([]PlayerAgent, error) {
+	if !botsEnabled {
 		return nil, nil
+	}
+
+	count := maxPlayers
+	seed := int64(42)
+
+	strategies := []BotStrategy{
+		StrategyAggressive,
+		StrategyDefensive,
+		StrategyExpansion,
+		StrategyRandom,
+		StrategySimple,
 	}
 
 	var agents []PlayerAgent
-
-	// If individual player configs are provided, use them.
-	if len(cfg.Players) > 0 {
-		if len(cfg.Players) > maxPlayers {
-			return nil, fmt.Errorf("bot count %d exceeds max players %d", len(cfg.Players), maxPlayers)
-		}
-		for _, p := range cfg.Players {
-			agent, err := CreateBot(p.Name, p.Strategy, p.Seed)
-			if err != nil {
-				return nil, err
-			}
-			agents = append(agents, agent)
-		}
-		return agents, nil
-	}
-
-	// Otherwise, generate bots from count + default strategy.
-	count := cfg.Count
-	if count <= 0 {
-		return nil, nil
-	}
-	if count > maxPlayers {
-		return nil, fmt.Errorf("bot count %d exceeds max players %d", count, maxPlayers)
-	}
-
-	seed := cfg.Seed
-	if seed == 0 {
-		seed = 42
-	}
-
 	for i := 0; i < count; i++ {
-		name := fmt.Sprintf("Bot-%s-%d", cfg.DefaultStrategy, i+1)
-		agent, err := CreateBot(name, cfg.DefaultStrategy, seed+int64(i))
+		strategy := strategies[i%len(strategies)]
+		name := fmt.Sprintf("Bot-%s-%d", strategy, i+1)
+		agent, err := CreateBot(name, strategy, seed+int64(i))
 		if err != nil {
 			return nil, err
 		}

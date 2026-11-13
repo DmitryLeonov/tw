@@ -10,7 +10,7 @@ func newTestEngine(t *testing.T) *Engine {
 	return NewEngine(Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -51,7 +51,7 @@ func TestJoin_FullMatch(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -116,7 +116,7 @@ func TestSubmit_GameOver(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    1,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -200,7 +200,7 @@ func TestResolveExpiredTurn_AfterTimeout(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    10,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -220,7 +220,7 @@ func TestResolveExpiredTurn_AlreadyResolved(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  1,
 		MaxTurns:    10,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -240,7 +240,7 @@ func TestTurnSignal_ClosedOnResolution(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    10,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -266,7 +266,7 @@ func TestTurnSignal_NewChannelAfterResolution(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    10,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -362,8 +362,8 @@ func TestConfig_ReturnsDefaults(t *testing.T) {
 	if cfg.MaxPlayers != 4 {
 		t.Errorf("expected MaxPlayers 4, got %d", cfg.MaxPlayers)
 	}
-	if cfg.TurnTimeout != 500*time.Millisecond {
-		t.Errorf("expected TurnTimeout 500ms, got %v", cfg.TurnTimeout)
+	if cfg.TurnDelay != 500*time.Millisecond {
+		t.Errorf("expected TurnDelay 500ms, got %v", cfg.TurnDelay)
 	}
 }
 
@@ -381,7 +381,7 @@ func TestIsGameOver_AfterMaxTurns(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    2,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
@@ -405,7 +405,7 @@ func TestResultsForTurn(t *testing.T) {
 	e := NewEngine(Config{
 		MaxPlayers:  2,
 		MaxTurns:    10,
-		TurnTimeout: 100 * time.Millisecond,
+		TurnDelay: 100 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})

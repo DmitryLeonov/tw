@@ -1,6 +1,6 @@
 # Territory Wars server (MVP)
 
-A small Go server for a turn-based, simultaneous-action territory game. Students run their own Python/C# bots and connect to the teacher's server over WebSocket.
+A small Go server for a turn-based, simultaneous-action territory game. Students run their own Python/C#/Go bots and connect to the teacher's server over WebSocket.
 
 ## Requirements
 
@@ -11,15 +11,36 @@ A small Go server for a turn-based, simultaneous-action territory game. Students
 
 ```bash
 go mod tidy
-go run ./cmd/server
+go build -o bin/server ./cmd/server/
+./bin/server -config config.json
 ```
 
-Environment variables:
+Environment variables override config.json values:
 
-- `PORT` (default `8080`)
-- `MAX_PLAYERS` (default `20`)
-- `MAX_TURNS` (default `200`)
-- `TURN_TIMEOUT_SECONDS` (default `15`)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP listen port |
+| `MAX_PLAYERS` | `30` | Maximum registered players |
+| `MAX_TURNS` | `200` | Maximum turns per game |
+| `TURN_TIMEOUT_SECONDS` | `15` | Turn timeout in seconds |
+
+## Game Lifecycle
+
+The game **does not start automatically**. It must be started explicitly:
+
+```bash
+# Start the game
+curl -X POST http://localhost:8080/api/v1/start
+
+# Stop the game (resets everything)
+curl -X POST http://localhost:8080/api/v1/stop
+```
+
+Or via the **interactive console** (running on stdin):
+
+```
+Commands: start, stop, pause, resume, results, quit
+```
 
 ## Register a player
 
@@ -63,19 +84,56 @@ Supported actions:
 
 ## HTTP endpoints
 
-- `GET /health`
-- `POST /api/v1/join` with `{"name":"..."}`
-- `GET /api/v1/state` with `Authorization: Bearer TOKEN`
-- `GET /api/v1/leaderboard`
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/v1/join` | Register a player (`{"name":"..."}`) |
+| `GET` | `/api/v1/state` | Get current observation (`Authorization: Bearer TOKEN`) |
+| `GET` | `/api/v1/leaderboard` | Get leaderboard and game status |
+| `GET` | `/api/v1/results` | Get final results (after game over) |
+| `POST` | `/api/v1/start` | Start the game (no body) |
+| `POST` | `/api/v1/stop` | Stop the game, reset state, disconnect all clients |
+
+## Viewer
+
+A real-time map viewer is available at:
+
+```
+http://localhost:8080/viewer
+```
+
+It uses Server-Sent Events (SSE) at `/api/v1/viewer/events` to stream game state updates.
 
 ## Game rules in this prototype
 
-- Map: 40 x 40, 20 spawn positions.
-- Each player starts with 5 energy and a base.
-- One action per player per turn.
-- All submitted actions are resolved together at the round boundary.
-- A missing action becomes `pass` when the turn timeout expires.
-- A match ends after `MAX_TURNS`.
+- Map: 40 × 40, toroidal (coordinates wrap around)
+- 20 spawn positions
+- Each player starts with 5 energy and a base
+- One action per player per turn
+- All submitted actions are resolved together at the round boundary
+- A missing action becomes `pass` when the turn timeout expires
+- A match ends after `MAX_TURNS`
+
+## Bots
+
+The server can spawn AI bots automatically when configured in `config.json`:
+
+```json
+{
+  "bots": {
+    "enabled": true,
+    "default_strategy": "simple",
+    "turn_delay": "3s",
+    "players": [
+      { "name": "Alpha", "strategy": "aggressive", "seed": 100 },
+      { "name": "Bravo", "strategy": "aggressive", "seed": 101 },
+      ...
+    ]
+  }
+}
+```
+
+Supported bot strategies: `simple`, `aggressive`, `defensive`, `expansion`, `random`.
 
 ## Architecture
 
@@ -86,14 +144,14 @@ WebSocket handlers and the game engine.
 
 ```
 WebSocket handler ──► SubmitAction(actionCh) ──► run() event loop
-                                                        │
-                                          engine.Submit()
-                                          engine.TurnSignal()
-                                                        │
-                                          enqueue(TURN_RESOLVED)
-                                          enqueue(OBSERVATION)
-                                                        ▼
-                                              all connected clients
+                                                         │
+                                           engine.Submit()
+                                           engine.TurnSignal()
+                                                         │
+                                           enqueue(TURN_RESOLVED)
+                                           enqueue(OBSERVATION)
+                                                         ▼
+                                               all connected clients
 ```
 
 **Event-loop architecture:** One `run()` goroutine serialises all action processing and

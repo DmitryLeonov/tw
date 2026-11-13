@@ -15,40 +15,21 @@ const (
 	StrategyAggressive BotStrategy = "aggressive"
 	StrategyDefensive  BotStrategy = "defensive"
 	StrategyExpansion  BotStrategy = "expansion"
+	StrategySimple     BotStrategy = "simple"
 )
-
-// BotPlayerConfig defines configuration for a single bot player.
-type BotPlayerConfig struct {
-	Name            string      `json:"name"`
-	Strategy        BotStrategy `json:"strategy"`
-	DecisionTimeout string      `json:"decision_timeout"`
-	Seed            int64       `json:"seed"`
-}
-
-// BotConfig defines the overall bot configuration.
-type BotConfig struct {
-	Enabled         bool              `json:"enabled"`
-	Players         []BotPlayerConfig `json:"players"`
-	Count           int               `json:"count"`
-	DefaultStrategy BotStrategy       `json:"default_strategy"`
-	DecisionTimeout string            `json:"decision_timeout"`
-	TurnDelay       string            `json:"turn_delay"`
-	Seed            int64             `json:"seed"`
-}
 
 // GameConfig is the top-level server configuration.
 type GameConfig struct {
-	Port              int       `json:"port"`
-	MaxPlayers        int       `json:"max_players"`
-	MaxTurns          int       `json:"max_turns"`
-	Width             int       `json:"width"`
-	Height            int       `json:"height"`
-	TurnTimeout       string    `json:"turn_timeout"`
-	RegistrationDelay string    `json:"registration_delay"`
-	ResultsDir        string    `json:"results_dir"`
-	MarkRate          int       `json:"mark_rate"`
-	MarkThreshold     int       `json:"mark_threshold"`
-	Bots              BotConfig `json:"bots"`
+	Port              int    `json:"port"`
+	MaxPlayers        int    `json:"max_players"`
+	MaxTurns          int    `json:"max_turns"`
+	Width             int    `json:"width"`
+	Height            int    `json:"height"`
+	TurnDelay       string `json:"turn_delay"`
+	ResultsDir        string `json:"results_dir"`
+	MarkRate          int    `json:"mark_rate"`
+	MarkThreshold     int    `json:"mark_threshold"`
+	BotsEnabled       bool   `json:"bots_enabled"`
 }
 
 // LoadConfig reads and parses a JSON config file.
@@ -76,24 +57,12 @@ func LoadConfig(path string) (*GameConfig, error) {
 	if cfg.Height <= 0 {
 		cfg.Height = 40
 	}
-	if cfg.TurnTimeout == "" {
-		cfg.TurnTimeout = "15s"
-	}
-	if cfg.RegistrationDelay == "" {
-		cfg.RegistrationDelay = "1m"
+	if cfg.TurnDelay == "" {
+		cfg.TurnDelay = "15s"
 	}
 	// Resolve results_dir relative to the config file's directory.
 	if cfg.ResultsDir != "" && !filepath.IsAbs(cfg.ResultsDir) {
 		cfg.ResultsDir = filepath.Join(filepath.Dir(path), cfg.ResultsDir)
-	}
-	if cfg.Bots.DefaultStrategy == "" {
-		cfg.Bots.DefaultStrategy = StrategyRandom
-	}
-	if cfg.Bots.DecisionTimeout == "" {
-		cfg.Bots.DecisionTimeout = "2s"
-	}
-	if cfg.Bots.TurnDelay == "" {
-		cfg.Bots.TurnDelay = "5s"
 	}
 	if cfg.MarkRate <= 0 {
 		cfg.MarkRate = 10

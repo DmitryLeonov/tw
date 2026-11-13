@@ -27,12 +27,6 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 	if cfg.MaxTurns != 200 {
 		t.Errorf("expected max_turns 200, got %d", cfg.MaxTurns)
 	}
-	if cfg.Bots.DefaultStrategy != StrategyRandom {
-		t.Errorf("expected default_strategy random, got %s", cfg.Bots.DefaultStrategy)
-	}
-	if cfg.Bots.DecisionTimeout != "2s" {
-		t.Errorf("expected decision_timeout 2s, got %s", cfg.Bots.DecisionTimeout)
-	}
 }
 
 func TestLoadConfig_OverrideValues(t *testing.T) {
@@ -42,13 +36,7 @@ func TestLoadConfig_OverrideValues(t *testing.T) {
 		"port": 9090,
 		"max_players": 10,
 		"max_turns": 50,
-		"bots": {
-			"enabled": true,
-			"default_strategy": "aggressive",
-			"decision_timeout": "5s",
-			"seed": 123,
-			"count": 3
-		}
+		"bots_enabled": true
 	}`
 	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
 		t.Fatal(err)
@@ -68,17 +56,8 @@ func TestLoadConfig_OverrideValues(t *testing.T) {
 	if cfg.MaxTurns != 50 {
 		t.Errorf("expected max_turns 50, got %d", cfg.MaxTurns)
 	}
-	if cfg.Bots.DefaultStrategy != StrategyAggressive {
-		t.Errorf("expected default_strategy aggressive, got %s", cfg.Bots.DefaultStrategy)
-	}
-	if cfg.Bots.DecisionTimeout != "5s" {
-		t.Errorf("expected decision_timeout 5s, got %s", cfg.Bots.DecisionTimeout)
-	}
-	if cfg.Bots.Seed != 123 {
-		t.Errorf("expected seed 123, got %d", cfg.Bots.Seed)
-	}
-	if cfg.Bots.Count != 3 {
-		t.Errorf("expected count 3, got %d", cfg.Bots.Count)
+	if !cfg.BotsEnabled {
+		t.Errorf("expected bots_enabled true, got false")
 	}
 }
 

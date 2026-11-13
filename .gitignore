@@ -39,3 +39,7 @@ server_nobots.json
 
 # Dist
 dist/
+
+# Project assessments (not for commit)
+PROJECT_ASSESSMENT.md
+Project_Assessment.pdf

@@ -19,11 +19,13 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server, func()) {
 	engine := game.NewEngine(game.Config{
 		MaxPlayers:  4,
 		MaxTurns:    10,
-		TurnTimeout: 500 * time.Millisecond,
+		TurnDelay: 500 * time.Millisecond,
 		Width:       20,
 		Height:      20,
 	})
 	srv := New(engine)
+	// Manually start the game so the round manager's run loop can proceed.
+	srv.StartGame()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", srv.WebSocket)
 	mux.HandleFunc("/join", srv.Join)

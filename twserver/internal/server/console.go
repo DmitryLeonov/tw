@@ -36,6 +36,8 @@ func (s *Server) Console() {
 			}
 		case "stop":
 			fmt.Println("Resetting game...")
+			s.rounds.cleanupAll()
+			s.engine.Reset()
 			s.ResetGameStarted()
 			fmt.Println("Game reset to turn 0. Waiting for start.")
 		case "pause":

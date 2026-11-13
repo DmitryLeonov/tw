@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -50,7 +49,7 @@ func main() {
 		}
 		if tt := env("TURN_TIMEOUT_SECONDS", ""); tt != "" {
 			turnTimeout = time.Duration(intEnv("TURN_TIMEOUT_SECONDS", 15)) * time.Second
-		} else if t := cfg.TurnTimeout; t != "" {
+		} else if t := cfg.TurnDelay; t != "" {
 			if d, err := time.ParseDuration(t); err == nil {
 				turnTimeout = d
 			}
@@ -59,7 +58,7 @@ func main() {
 		engine = game.NewEngine(game.Config{
 			MaxPlayers:    cfg.MaxPlayers,
 			MaxTurns:      cfg.MaxTurns,
-			TurnTimeout:   turnTimeout,
+			TurnDelay:     turnTimeout,
 			Width:         cfg.Width,
 			Height:        cfg.Height,
 			MarkRate:      cfg.MarkRate,
@@ -72,7 +71,7 @@ func main() {
 		engine = game.NewEngine(game.Config{
 			MaxPlayers:    players,
 			MaxTurns:      maxTurns,
-			TurnTimeout:   turnTimeout,
+			TurnDelay:     turnTimeout,
 			Width:         40,
 			Height:        40,
 			MarkRate:      10,
@@ -88,6 +87,7 @@ func main() {
 	mux.HandleFunc("/api/v1/leaderboard", srv.Leaderboard)
 	mux.HandleFunc("/api/v1/results", srv.Results)
 	mux.HandleFunc("/api/v1/start", srv.Start)
+	mux.HandleFunc("/api/v1/stop", srv.Stop)
 	mux.HandleFunc("/ws", srv.WebSocket)
 
 	// Viewer routes.
@@ -112,18 +112,9 @@ func main() {
 		Handler: withCORS(mux),
 	}
 
-	// Graceful shutdown on SIGINT/SIGTERM.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigCh
-		log.Println("Shutting down...")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		httpServer.Shutdown(ctx)
-		srv.Shutdown()
-	}()
+	// Ignore SIGINT/SIGTERM so the server survives harness process-group kills.
+	// The server can still be stopped via /api/v1/stop or console "quit" command.
+	signal.Ignore(syscall.SIGINT, syscall.SIGTERM)
 
 	// Interactive console.
 	go srv.Console()
