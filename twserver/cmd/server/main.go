@@ -88,6 +88,8 @@ func main() {
 	mux.HandleFunc("/api/v1/results", srv.Results)
 	mux.HandleFunc("/api/v1/start", srv.Start)
 	mux.HandleFunc("/api/v1/stop", srv.Stop)
+	mux.HandleFunc("/api/v1/pause", srv.PauseHTTP)
+	mux.HandleFunc("/api/v1/resume", srv.ResumeHTTP)
 	mux.HandleFunc("/ws", srv.WebSocket)
 
 	// Viewer routes.

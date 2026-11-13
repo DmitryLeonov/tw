@@ -28,7 +28,7 @@ main.py
   │                       Action, ActionMessage, JoinResponse, Event
   │
   ├── client/strategy.py IGameStrategy (ABC), SimpleStrategy,
-  │                       AggressiveStrategy, build_strategy()
+  │                       build_strategy()
   │
   └── client/game_loop.py GameLoop — main game loop orchestrator
 ```
@@ -92,7 +92,7 @@ uv run python main.py --config config.json --log-level DEBUG
 
 ### Configuration File
 
-Файл `config.json` уже содержит пример конфигурации:
+The `config.json` file already contains an example configuration:
 
 ```json
 {
@@ -105,8 +105,7 @@ uv run python main.py --config config.json --log-level DEBUG
 ```
 
 Available strategies:
-- **`simple`** — Expands first, then attacks, then fortifies, then passes
-- **`aggressive`** — Attacks first, then expands, then fortifies, then passes
+- **`simple`** — Expands first, then attacks, then fortifies weakest cell (health ≤3), then passes
 
 ## How to Write Custom Strategies
 
@@ -140,7 +139,6 @@ Then register it in `build_strategy()`:
 def build_strategy(name: str) -> IGameStrategy:
     strategies = {
         "simple": SimpleStrategy,
-        "aggressive": AggressiveStrategy,
         "my_strategy": MyStrategy,
     }
     return strategies[name]()
@@ -217,7 +215,8 @@ Connection error: Connection refused
 **Fix**: Ensure the server is running:
 ```bash
 cd /apps/tw/twserver
-go run ./cmd/server
+go build -o bin/server ./cmd/server/
+./bin/server -config config.json
 ```
 
 ### Token Unauthorized
@@ -250,7 +249,7 @@ Timeout waiting for event
 Unknown strategy: foo
 ```
 
-**Fix**: Use `simple` or `aggressive`, or add your strategy to `build_strategy()`.
+**Fix**: Use `simple`, or add your strategy to `build_strategy()`.
 
 ## File Structure
 

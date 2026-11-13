@@ -104,7 +104,7 @@ uv run python main.py --name PythonClient --config config.json
 
 Or with command-line arguments:
 ```bash
-uv run python main.py --server http://localhost:8080 --name "MyBot" --strategy aggressive
+uv run python main.py --server http://localhost:8080 --name "MyBot"
 ```
 
 ### C# Client
@@ -143,14 +143,11 @@ Or with command-line arguments:
 ### `run.sh` Script
 
 ```bash
-# Start server + all 3 clients (no bots)
+# Start server + all 15 clients + 10 bots (default)
 ./run.sh
 
-# Start server with bots (bots play, no external clients)
-./run.sh --bots
-
-# Start server with bots + external clients
-./run.sh --mixed
+# Start server + 15 clients (no bots)
+./run.sh --no-bots
 
 # Skip a specific language
 ./run.sh --no-go --no-python
@@ -162,21 +159,19 @@ Or with command-line arguments:
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
 done
 
 # Python
 cd twclients/python
-export PATH="/root/.local/bin:$PATH"
 for i in 1 2 3 4 5; do
-  nohup uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
+  uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
 done
 
 # C#
 cd twclients/csharp
-export PATH="/opt/dotnet:$PATH"
 for i in 1 2 3 4 5; do
-  nohup dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
 done
 ```
 
@@ -191,21 +186,10 @@ All three clients include the `simple` strategy, which:
 3. **Chooses action** by priority:
    - **Expand** — if there is energy and adjacent neutral cells
    - **Attack** — if there is energy and adjacent enemy cells
-   - **Fortify** — if there is energy and own cells with low health
+   - **Fortify** — if there is energy and own cells with low health (≤3)
    - **Pass** — if no valid actions
 
-### Aggressive — Aggressive Strategy (Python)
-
-The Python client includes the `aggressive` strategy:
-
-1. **Attack** — priority: attack enemy cells
-2. **Expand** — then capture neutral cells
-3. **Fortify** — reinforce weak cells
-4. **Pass** — if no actions
-
-```bash
-uv run python main.py --strategy aggressive
-```
+Note: Only the `simple` strategy is currently implemented across all clients.
 
 ## How to Write Your Own Strategy
 
@@ -226,7 +210,6 @@ Register in `build_strategy()`:
 def build_strategy(name: str) -> IGameStrategy:
     strategies = {
         "simple": SimpleStrategy,
-        "aggressive": AggressiveStrategy,
         "my_strategy": MyStrategy,
     }
     return strategies[name]()
@@ -252,7 +235,7 @@ Register in `Program.cs`:
 IGameStrategy strategy = strategyName.ToLower() switch
 {
     "simple" => new SimpleStrategy(),
-    "aggressive" => new AggressiveStrategy(),
+    "my_strategy" => new MyStrategy(),
     _ => throw new ArgumentException(...)
 };
 ```
@@ -278,8 +261,8 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
     switch strings.ToLower(strategyName) {
     case "simple":
         return strategy.NewSimpleStrategy(logger)
-    case "aggressive":
-        return strategy.NewAggressiveStrategy(logger)
+    case "my_strategy":
+        return NewMyStrategy(logger)
     default:
         return strategy.NewSimpleStrategy(logger)
     }

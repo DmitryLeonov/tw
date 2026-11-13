@@ -28,7 +28,7 @@ main.py
   │                       Action, ActionMessage, JoinResponse, Event
   │
   ├── client/strategy.py IGameStrategy (ABC), SimpleStrategy,
-  │                       AggressiveStrategy, build_strategy()
+  │                       build_strategy()
   │
   └── client/game_loop.py GameLoop — оркестратор основного игрового цикла
 ```
@@ -139,7 +139,6 @@ class MyStrategy(IGameStrategy):
 def build_strategy(name: str) -> IGameStrategy:
     strategies = {
         "simple": SimpleStrategy,
-        "aggressive": AggressiveStrategy,
         "my_strategy": MyStrategy,
     }
     return strategies[name]()

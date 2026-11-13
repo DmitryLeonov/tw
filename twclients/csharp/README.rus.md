@@ -163,7 +163,7 @@ using TerritoryWars.Strategy;
 
 namespace TerritoryWars.Strategy;
 
-public class AggressiveStrategy : IGameStrategy
+public class MyStrategy : IGameStrategy
 {
     public Action Decide(Observation observation)
     {
@@ -171,27 +171,7 @@ public class AggressiveStrategy : IGameStrategy
         if (owned == null || owned.Count == 0)
             return new Action { Type = "pass" };
 
-        // Атакуем первым, затем expand, затем fortify
-        foreach (var cell in owned)
-        {
-            foreach (var neighbor in GetNeighbors(cell, observation.Width, observation.Height))
-            {
-                var target = observation.Cells.FirstOrDefault(c => c.X == neighbor.X && c.Y == neighbor.Y);
-                if (target != null && target.Owner != "" && target.Owner != observation.PlayerId)
-                {
-                    if (observation.Energy >= 2)
-                    {
-                        return new Action
-                        {
-                            Type = "attack",
-                            Target = new Point { X = neighbor.X, Y = neighbor.Y }
-                        };
-                    }
-                }
-            }
-        }
-
-        // Expand в нейтральную территорию
+        // Expand в нейтральную территорию, затем атака, затем fortify
         foreach (var cell in owned)
         {
             foreach (var neighbor in GetNeighbors(cell, observation.Width, observation.Height))
@@ -229,7 +209,7 @@ public class AggressiveStrategy : IGameStrategy
 IGameStrategy strategy = strategyName.ToLower() switch
 {
     "simple" => new SimpleStrategy(),
-    "aggressive" => new AggressiveStrategy(),
+    "my_strategy" => new MyStrategy(),
     _ => throw new ArgumentException(...)
 };
 ```
@@ -237,7 +217,7 @@ IGameStrategy strategy = strategyName.ToLower() switch
 ### Шаг 3: Запустите со своей стратегией
 
 ```bash
-dotnet run -- --strategy Aggressive
+dotnet run -- --strategy MyStrategy
 ```
 
 ## Справочник игровой механики

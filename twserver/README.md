@@ -22,7 +22,8 @@ Environment variables override config.json values:
 | `PORT` | `8080` | HTTP listen port |
 | `MAX_PLAYERS` | `30` | Maximum registered players |
 | `MAX_TURNS` | `200` | Maximum turns per game |
-| `TURN_TIMEOUT_SECONDS` | `15` | Turn timeout in seconds |
+
+Note: `TURN_TIMEOUT_SECONDS` is not used — turn delay is configured via `turn_delay` in `config.json`.
 
 ## Game Lifecycle
 
@@ -93,6 +94,8 @@ Supported actions:
 | `GET` | `/api/v1/results` | Get final results (after game over) |
 | `POST` | `/api/v1/start` | Start the game (no body) |
 | `POST` | `/api/v1/stop` | Stop the game, reset state, disconnect all clients |
+| `POST` | `/api/v1/pause` | Pause the game (stop turn processing) |
+| `POST` | `/api/v1/resume` | Resume the game (restart turn processing) |
 
 ## Viewer
 
@@ -107,7 +110,7 @@ It uses Server-Sent Events (SSE) at `/api/v1/viewer/events` to stream game state
 ## Game rules in this prototype
 
 - Map: 40 × 40, toroidal (coordinates wrap around)
-- 20 spawn positions
+- 30 spawn positions (up to max_players)
 - Each player starts with 5 energy and a base
 - One action per player per turn
 - All submitted actions are resolved together at the round boundary
@@ -116,20 +119,17 @@ It uses Server-Sent Events (SSE) at `/api/v1/viewer/events` to stream game state
 
 ## Bots
 
-The server can spawn AI bots automatically when configured in `config.json`:
+The server auto-generates bots when `bots_enabled` is true in `config.json`. Bots are created with rotating strategies and unique seeds (base=42).
 
 ```json
 {
-  "bots": {
-    "enabled": true,
-    "default_strategy": "simple",
-    "turn_delay": "3s",
-    "players": [
-      { "name": "Alpha", "strategy": "aggressive", "seed": 100 },
-      { "name": "Bravo", "strategy": "aggressive", "seed": 101 },
-      ...
-    ]
-  }
+  "port": 8080,
+  "max_players": 30,
+  "max_turns": 200,
+  "width": 40,
+  "height": 40,
+  "turn_delay": "1s",
+  "bots_enabled": true
 }
 ```
 
@@ -187,17 +187,13 @@ by their previous connection.
 
 ### Bounded outbound queues
 
-Each player has a bounded outbound channel (capacity 32). If the queue fills (the client
+Each player has a bounded outbound channel (capacity 256). If the queue fills (the client
 is slow to consume events), the connection is gracefully disconnected. The client can
 reconnect and receive the current observation.
 
 ### Graceful shutdown
 
-The server handles `SIGINT` and `SIGTERM`:
-
-1. `http.Server.Shutdown()` stops accepting new connections and drains existing ones.
-2. `RoundManager.Shutdown()` closes the context, broadcasts `GAME_OVER` to all clients,
-   and terminates the event loop.
+The server ignores `SIGINT` and `SIGTERM` to survive harness process-group kills.
 
 ## Testing
 

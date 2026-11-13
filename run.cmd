@@ -7,6 +7,7 @@ REM   run.cmd --no-go      ^| skip Go clients
 REM   run.cmd --no-python  ^| skip Python clients
 REM   run.cmd --no-csharp  ^| skip C# clients
 REM   run.cmd --no-bots    ^| server without bots (clients play)
+REM   run.cmd --force-start| start game after clients register
 
 setlocal enabledelayedexpansion
 
@@ -24,6 +25,7 @@ set RUN_BOTS=true
 set RUN_GO=true
 set RUN_PYTHON=true
 set RUN_CSHARP=true
+set RUN_FORCE_START=false
 
 REM Parse flags (skip if no arguments)
 if "%*" neq "" (
@@ -32,6 +34,7 @@ if "%*" neq "" (
         if "%%a"=="--no-python" set RUN_PYTHON=false
         if "%%a"=="--no-csharp" set RUN_CSHARP=false
         if "%%a"=="--no-bots" set RUN_BOTS=false
+        if "%%a"=="--force-start" set RUN_FORCE_START=true
     )
 )
 
@@ -80,14 +83,24 @@ if "%RUN_PYTHON%"=="true" (
     )
 )
 
-REM Start C# clients
+REM Start C# clients (delayed because dotnet takes time to load)
 if "%RUN_CSHARP%"=="true" (
-    echo === Starting %NUM_CSHARP% C# clients ===
+    echo === Starting %NUM_CSHARP% C# clients (delayed 15s) ===
+    timeout /t 15 /nobreak >nul
     cd /d "%CLIENTS_DIR%\csharp"
     for /l %%i in (1,1,%NUM_CSHARP%) do (
         start "CSharpClient%%i" cmd /c "dotnet bin\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple > %TEMP%\csharp_client_%%i.log 2>&1"
         echo   CSharpClient%%i started
     )
+)
+
+REM If --force-start, wait for clients to register then start the game
+if "%RUN_FORCE_START%"=="true" (
+    echo === Waiting for clients to register (15s) ===
+    timeout /t 15 /nobreak >nul
+    echo === Starting game manually ===
+    curl -s -X POST http://localhost:8080/api/v1/start
+    echo.
 )
 
 REM If no bots, wait for clients to register then start the game

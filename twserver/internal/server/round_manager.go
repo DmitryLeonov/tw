@@ -48,20 +48,22 @@ type RoundManager struct {
 	clients map[string]*clientState // playerID -> current clientState
 	gen     int64                   // monotonically increasing generation counter
 
-	actionCh chan playerAction // actions from WS handlers
-	forceTurnCh chan struct{} // forces select to check turnSignal after immediate resolve
+	actionCh       chan playerAction // actions from WS handlers
+	forceTurnCh    chan struct{}     // forces select to check turnSignal after immediate resolve
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
 	gameStarted chan struct{} // closed when registration delay expires or game is manually started
+	ready       chan struct{} // closed when run() enters the main loop (game is actually processing)
 
 	paused   bool
 	pauseCh  chan struct{}
 	pauseMu  sync.Mutex
 
-	resultsDir string // directory for saving results files
+	resultsDir       string                   // directory for saving results files
+	gameOverHandler  func()                   // called when game ends (max turns) — triggers full server stop
 }
 
 type playerAction struct {
@@ -80,6 +82,7 @@ func NewRoundManager(engine *game.Engine, gameStarted chan struct{}) *RoundManag
 		ctx:         ctx,
 		cancel:      cancel,
 		gameStarted: gameStarted,
+		ready:       make(chan struct{}),
 		pauseCh:     make(chan struct{}),
 		resultsDir:  "results",
 	}
@@ -199,6 +202,9 @@ func (rm *RoundManager) run() {
 	case <-rm.ctx.Done():
 		return
 	}
+
+	// Signal that the main loop has started — game is actually processing now.
+	close(rm.ready)
 
 	// Heartbeat ticker — broadcast STILL_ALIVE every 10s so clients
 	// know the server is alive even when no turns are resolving.
@@ -609,6 +615,8 @@ func (rm *RoundManager) ResetGameStarted() {
 		close(rm.gameStarted)
 	}
 	rm.gameStarted = make(chan struct{})
+	// Recreate ready channel — the old one is already closed.
+	rm.ready = make(chan struct{})
 }
 
 // SetGameStarted replaces the gameStarted channel.
@@ -624,12 +632,22 @@ func (rm *RoundManager) SetGameStarted(ch chan struct{}) {
 	rm.gameStarted = ch
 }
 
+// Ready returns the channel that is closed when the run() loop enters the
+// main processing loop. Used by StartGame() to wait until the game is
+// actually processing before returning success.
+func (rm *RoundManager) Ready() <-chan struct{} {
+	return rm.ready
+}
+
 // Reset stops the event loop and restarts it with a fresh context.
 // Used by the "stop" command to fully halt turn processing.
 func (rm *RoundManager) Reset() {
 	// Cancel current context — run() exits via ctx.Done().
 	rm.cancel()
 	rm.wg.Wait()
+
+	// Recreate ready channel — the old one is already closed.
+	rm.ready = make(chan struct{})
 
 	// Create a fresh context and restart the run loop.
 	ctx, cancel := context.WithCancel(context.Background())

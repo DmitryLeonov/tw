@@ -88,6 +88,12 @@ func (e *Engine) Join(name string) (*Player, error) {
 	if name == "" {
 		return nil, errors.New("player name is required")
 	}
+	// Reject duplicate player names.
+	for _, existing := range e.players {
+		if existing.Name == name {
+			return nil, fmt.Errorf("player name %q already registered as %s", name, existing.ID)
+		}
+	}
 	id := fmt.Sprintf("p%02d", len(e.players)+1)
 	token := randomHex(24)
 	n := len(e.players)

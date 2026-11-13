@@ -165,20 +165,20 @@ type Strategy interface {
 1. **Create a new file** in `internal/strategy/`:
 
 ```go
-// internal/strategy/aggressive.go
+// internal/strategy/my_strategy.go
 package strategy
 
 import (
     "twclient/internal/models"
 )
 
-type AggressiveStrategy struct{}
+type MyStrategy struct{}
 
-func NewAggressiveStrategy(logger *slog.Logger) *AggressiveStrategy {
-    return &AggressiveStrategy{}
+func NewMyStrategy(logger *slog.Logger) *MyStrategy {
+    return &MyStrategy{}
 }
 
-func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
+func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
     // Your logic here
     return nil // nil means "pass"
 }
@@ -187,8 +187,18 @@ func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
 2. **Analyze the observation**:
 
 ```go
-func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
+func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
     playerID := obs.PlayerID
+
+    // Find neutral cells adjacent to your territory
+    for _, cell := range obs.Cells {
+        if cell.Owner == "" && obs.Energy >= 1 {
+            return &models.Action{
+                Type:   "expand",
+                Target: &models.Point{X: cell.X, Y: cell.Y},
+            }
+        }
+    }
 
     // Find enemy cells adjacent to your territory
     for _, cell := range obs.Cells {
@@ -199,16 +209,6 @@ func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
                     Type:   "attack",
                     Target: &models.Point{X: cell.X, Y: cell.Y},
                 }
-            }
-        }
-    }
-
-    // Find neutral cells adjacent to your territory
-    for _, cell := range obs.Cells {
-        if cell.Owner == "" && obs.Energy >= 1 {
-            return &models.Action{
-                Type:   "expand",
-                Target: &models.Point{X: cell.X, Y: cell.Y},
             }
         }
     }
@@ -225,8 +225,8 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
     switch strings.ToLower(strategyName) {
     case "simple":
         return strategy.NewSimpleStrategy(logger)
-    case "aggressive":
-        return strategy.NewAggressiveStrategy(logger)
+    case "my_strategy":
+        return NewMyStrategy(logger)
     default:
         return strategy.NewSimpleStrategy(logger)
     }
@@ -237,7 +237,7 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
 
 ```json
 {
-  "strategy": "aggressive"
+  "strategy": "my_strategy"
 }
 ```
 
@@ -271,7 +271,8 @@ Error: join request failed: Post "http://localhost:8080/api/v1/join": dial tcp 1
 
 ```bash
 cd /apps/tw/twserver
-go run ./cmd/server -config config.json
+go build -o bin/server ./cmd/server/
+./bin/server -config config.json
 ```
 
 ### Unauthorized Error
@@ -296,7 +297,7 @@ Error: action failed with status 400: stale turn: current turn is 5
 Warning: unknown strategy, falling back to simple
 ```
 
-**Fix**: Check your `config.json` strategy field. Currently supported: `simple`.
+**Fix**: Check your `config.json` strategy field. Currently supported: `simple` only.
 
 ### High Memory Usage
 

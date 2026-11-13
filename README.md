@@ -18,14 +18,17 @@ Territory Wars is a multiplayer game where players expand their territory on a t
 ### One-command launch
 
 ```bash
-# Server + 5 Go + 5 Python + 5 C# clients (no bots)
+# Server + 10 bots + all 15 clients (default)
 ./run.sh
 
-# Server + 10 bots (bots play, no external clients)
-./run.sh --bots
+# Server + all 15 clients, no bots
+./run.sh --no-bots
 
-# Server + 10 bots + all 15 external clients
-./run.sh --mixed
+# Server + bots, skip Go clients
+./run.sh --no-go
+
+# Server + bots + clients, start game after registration
+./run.sh --force-start
 ```
 
 ### Manual start
@@ -37,9 +40,9 @@ go build -o bin/server ./cmd/server/
 ./bin/server -config config.json
 
 # Start clients in separate terminals
-cd ../twclients/golang && go run ./cmd/client/ --name GoClient --config config.json
+cd ../twclients/golang && ./bin/client --name GoClient --config config.json
 cd ../twclients/python && uv run python main.py --name PythonClient --config config.json
-cd ../twclients/csharp && dotnet run -- --name CSharpClient --config config.json
+cd ../twclients/csharp && dotnet bin/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json
 ```
 
 ## Architecture
@@ -98,7 +101,7 @@ tw/
 
 - **Size:** 40 × 40
 - **Toroidal:** coordinates wrap-around via `% Width` and `% Height`
-- **20 spawn positions**
+- **30 spawn positions** (up to max_players)
 - **Cell types:** `base` (start), `normal`, `resource`
 
 ### Actions
@@ -136,6 +139,8 @@ tw/
 | `GET` | `/api/v1/results` | Get final results (after game over) |
 | `POST` | `/api/v1/start` | Start the game |
 | `POST` | `/api/v1/stop` | Stop the game, reset state, disconnect all clients |
+| `POST` | `/api/v1/pause` | Pause the game (stop turn processing) |
+| `POST` | `/api/v1/resume` | Resume the game (restart turn processing) |
 
 ### WebSocket
 
@@ -159,12 +164,12 @@ Action format:
 ### Using `run.sh`
 
 ```bash
-./run.sh              # Server + 5 Go + 5 Python + 5 C# (no bots)
-./run.sh --bots       # Server + 10 bots
-./run.sh --mixed      # Server + 10 bots + 15 clients
+./run.sh              # Server + 10 bots + all 15 clients
+./run.sh --no-bots    # Server + 15 clients (no bots)
 ./run.sh --no-go      # Skip Go clients
 ./run.sh --no-python  # Skip Python clients
 ./run.sh --no-csharp  # Skip C# clients
+./run.sh --force-start# Start game after clients register
 ```
 
 ### Manual (5 copies each)
@@ -173,7 +178,7 @@ Action format:
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup go run ./cmd/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
 done
 
 # Python
@@ -185,7 +190,7 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
 done
 ```
 
@@ -197,27 +202,17 @@ Uses Server-Sent Events (SSE) at `/api/v1/viewer/events`.
 
 ## Bots
 
-The server can run 10 built-in AI bots configured in `twserver/config.json`:
+The server auto-generates bots when `bots_enabled` is true in `twserver/config.json`. Bots are created with rotating strategies and unique seeds (base=42).
 
 ```json
 {
-  "bots": {
-    "enabled": true,
-    "default_strategy": "simple",
-    "turn_delay": "3s",
-    "players": [
-      { "name": "Alpha", "strategy": "aggressive", "seed": 100 },
-      { "name": "Bravo", "strategy": "aggressive", "seed": 101 },
-      { "name": "Beta", "strategy": "defensive", "seed": 200 },
-      { "name": "Charlie", "strategy": "defensive", "seed": 201 },
-      { "name": "Gamma", "strategy": "expansion", "seed": 300 },
-      { "name": "Delta", "strategy": "expansion", "seed": 301 },
-      { "name": "Echo", "strategy": "random", "seed": 400 },
-      { "name": "Foxtrot", "strategy": "random", "seed": 401 },
-      { "name": "Golf", "strategy": "simple", "seed": 500 },
-      { "name": "Hammer", "strategy": "simple", "seed": 501 }
-    ]
-  }
+  "port": 8080,
+  "max_players": 30,
+  "max_turns": 200,
+  "width": 40,
+  "height": 40,
+  "turn_delay": "1s",
+  "bots_enabled": true
 }
 ```
 

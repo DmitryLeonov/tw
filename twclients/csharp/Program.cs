@@ -19,16 +19,20 @@ for (var i = 0; i < commandArgs.Length; i++)
     switch (commandArgs[i].ToLower())
     {
         case "--config":
-            if (i + 1 < commandArgs.Length) configPath = commandArgs[++i];
+            if (i + 2 <= commandArgs.Length) configPath = commandArgs[i + 1];
+            i++;
             break;
         case "--server":
-            if (i + 1 < commandArgs.Length) serverUrl = commandArgs[++i];
+            if (i + 2 <= commandArgs.Length) serverUrl = commandArgs[i + 1];
+            i++;
             break;
         case "--name":
-            if (i + 1 < commandArgs.Length) playerName = commandArgs[++i];
+            if (i + 2 <= commandArgs.Length) playerName = commandArgs[i + 1];
+            i++;
             break;
         case "--strategy":
-            if (i + 1 < commandArgs.Length) strategyName = commandArgs[++i];
+            if (i + 2 <= commandArgs.Length) strategyName = commandArgs[i + 1];
+            i++;
             break;
     }
 }

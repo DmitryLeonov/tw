@@ -96,7 +96,14 @@ func (s *Server) Stop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("Game stopped via /api/v1/stop — invalidating tokens and disconnecting clients")
+	s.StopGame()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "game stopped"})
+}
 
+// StopGame performs the full game stop sequence: invalidates tokens, disconnects
+// clients, resets engine state, shuts down bots, and restarts the round manager.
+// Used by both the API handler and the console command.
+func (s *Server) StopGame() {
 	// 0. Invalidate all tokens so reconnecting clients get "unauthorized".
 	s.engine.ClearTokens()
 
@@ -129,8 +136,26 @@ func (s *Server) Stop(w http.ResponseWriter, r *http.Request) {
 	s.shutdownCtx = ctx
 	s.shutdownCancel = cancel
 	s.viewer.StartMonitoring(ctx)
+}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "game stopped"})
+// PauseHTTP handles POST /api/v1/pause — stops the event loop from processing actions.
+func (s *Server) PauseHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+		return
+	}
+	s.Pause()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "game paused"})
+}
+
+// ResumeHTTP handles POST /api/v1/resume — unblocks the event loop.
+func (s *Server) ResumeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+		return
+	}
+	s.Resume()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "game resumed"})
 }
 
 // Pause stops the event loop from processing actions and advancing turns.
@@ -177,7 +202,14 @@ func (s *Server) StartGame() bool {
 
 		// Spawn bots to fill remaining player slots.
 		if s.config == nil {
-			return true
+			// No config — wait for round manager to be ready, then return.
+			select {
+			case <-s.rounds.Ready():
+				return true
+			case <-time.After(5 * time.Second):
+				log.Printf("Warning: round manager ready timeout")
+				return true
+			}
 		}
 		humanCount := s.botManager.HumanPlayerCount()
 		botCount := s.config.MaxPlayers - humanCount
@@ -188,7 +220,14 @@ func (s *Server) StartGame() bool {
 			}
 		}
 
-		return true
+		// Wait for round manager to enter the main loop (game is actually processing).
+		select {
+		case <-s.rounds.Ready():
+			return true
+		case <-time.After(5 * time.Second):
+			log.Printf("Warning: round manager ready timeout")
+			return true
+		}
 	}
 }
 

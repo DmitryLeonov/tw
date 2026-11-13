@@ -35,15 +35,15 @@ func TestJoin_ReturnsPlayerWithToken(t *testing.T) {
 	}
 }
 
-func TestJoin_DuplicateNameAllowed(t *testing.T) {
+func TestJoin_DuplicateNameRejected(t *testing.T) {
 	e := newTestEngine(t)
 	_, err1 := e.Join("Alice")
 	if err1 != nil {
 		t.Fatalf("first Join: %v", err1)
 	}
 	_, err2 := e.Join("Alice")
-	if err2 != nil {
-		t.Fatalf("second Join with same name: %v", err2)
+	if err2 == nil {
+		t.Fatalf("expected error on duplicate name, got nil")
 	}
 }
 

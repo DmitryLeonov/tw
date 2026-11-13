@@ -104,7 +104,7 @@ uv run python main.py --name PythonClient --config config.json
 
 Или с аргументами командной строки:
 ```bash
-uv run python main.py --server http://localhost:8080 --name "MyBot" --strategy aggressive
+uv run python main.py --server http://localhost:8080 --name "MyBot"
 ```
 
 ### C# Client
@@ -143,14 +143,11 @@ go build -o client ./cmd/client/
 ### Скрипт `run.sh`
 
 ```bash
-# Запустить сервер + все 3 клиента (без ботов)
+# Запустить сервер + все 15 клиентов + 10 ботов (по умолчанию)
 ./run.sh
 
-# Запустить сервер с ботами (боты играют, внешние клиенты не подключаются)
-./run.sh --bots
-
-# Запустить сервер с ботами + внешними клиентами
-./run.sh --mixed
+# Запустить сервер + 15 клиентов (без ботов)
+./run.sh --no-bots
 
 # Пропустить конкретный язык
 ./run.sh --no-go --no-python
@@ -162,21 +159,19 @@ go build -o client ./cmd/client/
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
 done
 
 # Python
 cd twclients/python
-export PATH="/root/.local/bin:$PATH"
 for i in 1 2 3 4 5; do
-  nohup uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
+  uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
 done
 
 # C#
 cd twclients/csharp
-export PATH="/opt/dotnet:$PATH"
 for i in 1 2 3 4 5; do
-  nohup dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
 done
 ```
 
@@ -191,21 +186,10 @@ done
 3. **Выбирает действие** по приоритету:
    - **Expand** — если есть энергия и соседние нейтральные клетки
    - **Attack** — если есть энергия и соседние вражеские клетки
-   - **Fortify** — если есть энергия и свои клетки с низким здоровьем
+   - **Fortify** — если есть энергия и свои клетки с низким здоровьем (≤3)
    - **Pass** — если нет допустимых действий
 
-### Aggressive — агрессивная стратегия (Python)
-
-В Python-клиенте доступна стратегия `aggressive`:
-
-1. **Attack** — приоритет: атаковать вражеские клетки
-2. **Expand** — затем захватывать нейтральные
-3. **Fortify** — укреплять слабые клетки
-4. **Pass** — если нет действий
-
-```bash
-uv run python main.py --strategy aggressive
-```
+Примечание: Только стратегия `simple` реализована во всех клиентах.
 
 ## Как написать собственную стратегию
 
@@ -226,7 +210,6 @@ class MyStrategy(IGameStrategy):
 def build_strategy(name: str) -> IGameStrategy:
     strategies = {
         "simple": SimpleStrategy,
-        "aggressive": AggressiveStrategy,
         "my_strategy": MyStrategy,
     }
     return strategies[name]()
@@ -252,7 +235,7 @@ public class MyStrategy : IGameStrategy
 IGameStrategy strategy = strategyName.ToLower() switch
 {
     "simple" => new SimpleStrategy(),
-    "aggressive" => new AggressiveStrategy(),
+    "my_strategy" => new MyStrategy(),
     _ => throw new ArgumentException(...)
 };
 ```
@@ -278,8 +261,8 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
     switch strings.ToLower(strategyName) {
     case "simple":
         return strategy.NewSimpleStrategy(logger)
-    case "aggressive":
-        return strategy.NewAggressiveStrategy(logger)
+    case "my_strategy":
+        return NewMyStrategy(logger)
     default:
         return strategy.NewSimpleStrategy(logger)
     }

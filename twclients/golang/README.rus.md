@@ -165,7 +165,7 @@ type Strategy interface {
 1. **Создайте новый файл** в `internal/strategy/`:
 
 ```go
-// internal/strategy/aggressive.go
+// internal/strategy/my_strategy.go
 package strategy
 
 import (
@@ -173,13 +173,13 @@ import (
     "twclient/internal/models"
 )
 
-type AggressiveStrategy struct{}
+type MyStrategy struct{}
 
-func NewAggressiveStrategy(logger *slog.Logger) *AggressiveStrategy {
-    return &AggressiveStrategy{}
+func NewMyStrategy(logger *slog.Logger) *MyStrategy {
+    return &MyStrategy{}
 }
 
-func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
+func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
     // Ваша логика здесь
     return nil // nil означает "pass"
 }
@@ -188,8 +188,18 @@ func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
 2. **Проанализируйте наблюдение**:
 
 ```go
-func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
+func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
     playerID := obs.PlayerID
+
+    // Найдите нейтральные клетки рядом с вашей территорией
+    for _, cell := range obs.Cells {
+        if cell.Owner == "" && obs.Energy >= 1 {
+            return &models.Action{
+                Type:   "expand",
+                Target: &models.Point{X: cell.X, Y: cell.Y},
+            }
+        }
+    }
 
     // Найдите вражеские клетки рядом с вашей территорией
     for _, cell := range obs.Cells {
@@ -200,16 +210,6 @@ func (s *AggressiveStrategy) Decide(obs *models.Observation) *models.Action {
                     Type:   "attack",
                     Target: &models.Point{X: cell.X, Y: cell.Y},
                 }
-            }
-        }
-    }
-
-    // Найдите нейтральные клетки рядом с вашей территорией
-    for _, cell := range obs.Cells {
-        if cell.Owner == "" && obs.Energy >= 1 {
-            return &models.Action{
-                Type:   "expand",
-                Target: &models.Point{X: cell.X, Y: cell.Y},
             }
         }
     }
@@ -226,8 +226,8 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
     switch strings.ToLower(strategyName) {
     case "simple":
         return strategy.NewSimpleStrategy(logger)
-    case "aggressive":
-        return strategy.NewAggressiveStrategy(logger)
+    case "my_strategy":
+        return NewMyStrategy(logger)
     default:
         return strategy.NewSimpleStrategy(logger)
     }
@@ -238,7 +238,7 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
 
 ```json
 {
-  "strategy": "aggressive"
+  "strategy": "my_strategy"
 }
 ```
 

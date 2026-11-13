@@ -18,14 +18,17 @@ Territory Wars — многопользовательская игра, где �
 ### Запуск одной командой
 
 ```bash
-# Сервер + 5 Go + 5 Python + 5 C# клиентов (без ботов)
+# Сервер + 10 ботов + все 15 клиентов (по умолчанию)
 ./run.sh
 
-# Сервер + 10 ботов (боты играют, внешних клиентов нет)
-./run.sh --bots
+# Сервер + все 15 клиентов, без ботов
+./run.sh --no-bots
 
-# Сервер + 10 ботов + все 15 внешних клиентов
-./run.sh --mixed
+# Сервер + боты, пропустить Go-клиентов
+./run.sh --no-go
+
+# Сервер + боты + клиенты, запустить игру после регистрации
+./run.sh --force-start
 ```
 
 ### Ручной запуск
@@ -37,9 +40,9 @@ go build -o bin/server ./cmd/server/
 ./bin/server -config config.json
 
 # Запуск клиентов в отдельных терминалах
-cd ../twclients/golang && go run ./cmd/client/ --name GoClient --config config.json
+cd ../twclients/golang && ./bin/client --name GoClient --config config.json
 cd ../twclients/python && uv run python main.py --name PythonClient --config config.json
-cd ../twclients/csharp && dotnet run -- --name CSharpClient --config config.json
+cd ../twclients/csharp && dotnet bin/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json
 ```
 
 ## Архитектура
@@ -98,7 +101,7 @@ tw/
 
 - **Размер:** 40 × 40
 - **Тороидальная:** координаты wrap-around через `% Width` и `% Height`
-- **20 позиций спавна**
+- **30 позиций спавна** (до max_players)
 - **Типы клеток:** `base` (база), `normal` (обычная), `resource` (ресурсная)
 
 ### Действия
@@ -136,6 +139,8 @@ tw/
 | `GET` | `/api/v1/results` | Получить финальные результаты (после окончания) |
 | `POST` | `/api/v1/start` | Запустить игру |
 | `POST` | `/api/v1/stop` | Остановить игру, сбросить состояние, отключить всех клиентов |
+| `POST` | `/api/v1/pause` | Поставить игру на паузу (остановить обработку ходов) |
+| `POST` | `/api/v1/resume` | Продолжить игру (возобновить обработку ходов) |
 
 ### WebSocket
 
@@ -159,12 +164,12 @@ ws://localhost:8080/ws?token=ВАШ_ТОКЕН
 ### С помощью `run.sh`
 
 ```bash
-./run.sh              # Сервер + 5 Go + 5 Python + 5 C# (без ботов)
-./run.sh --bots       # Сервер + 10 ботов
-./run.sh --mixed      # Сервер + 10 ботов + 15 клиентов
+./run.sh              # Сервер + 10 ботов + все 15 клиентов
+./run.sh --no-bots    # Сервер + 15 клиентов (без ботов)
 ./run.sh --no-go      # Пропустить Go-клиентов
 ./run.sh --no-python  # Пропустить Python-клиентов
 ./run.sh --no-csharp  # Пропустить C#-клиентов
+./run.sh --force-start# Запустить игру после регистрации клиентов
 ```
 
 ### Ручной запуск (по 5 копий каждого)
@@ -173,7 +178,7 @@ ws://localhost:8080/ws?token=ВАШ_ТОКЕН
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup go run ./cmd/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
 done
 
 # Python
@@ -185,7 +190,7 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
 done
 ```
 
@@ -197,27 +202,17 @@ done
 
 ## Боты
 
-Сервер может запускать 10 встроенных ИИ-ботов, настроенных в `twserver/config.json`:
+Сервер автоматически создаёт ботов при `bots_enabled: true` в `twserver/config.json`. Боты создаются с ротацией стратегий и уникальными seed (base=42).
 
 ```json
 {
-  "bots": {
-    "enabled": true,
-    "default_strategy": "simple",
-    "turn_delay": "3s",
-    "players": [
-      { "name": "Alpha", "strategy": "aggressive", "seed": 100 },
-      { "name": "Bravo", "strategy": "aggressive", "seed": 101 },
-      { "name": "Beta", "strategy": "defensive", "seed": 200 },
-      { "name": "Charlie", "strategy": "defensive", "seed": 201 },
-      { "name": "Gamma", "strategy": "expansion", "seed": 300 },
-      { "name": "Delta", "strategy": "expansion", "seed": 301 },
-      { "name": "Echo", "strategy": "random", "seed": 400 },
-      { "name": "Foxtrot", "strategy": "random", "seed": 401 },
-      { "name": "Golf", "strategy": "simple", "seed": 500 },
-      { "name": "Hammer", "strategy": "simple", "seed": 501 }
-    ]
-  }
+  "port": 8080,
+  "max_players": 30,
+  "max_turns": 200,
+  "width": 40,
+  "height": 40,
+  "turn_delay": "1s",
+  "bots_enabled": true
 }
 ```
 
