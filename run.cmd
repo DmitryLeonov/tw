@@ -83,6 +83,20 @@ if "%RUN_PYTHON%"=="true" (
     )
 )
 
+REM Build C# clients
+if "%RUN_CSHARP%"=="true" (
+    echo === Building C# clients ===
+    cd /d "%CLIENTS_DIR%\csharp"
+    dotnet publish --configuration Release >nul 2>&1
+    if errorlevel 1 (
+        echo C# build failed, skipping C# clients
+        set RUN_CSHARP=false
+    ) else (
+        echo C# clients built successfully
+    )
+    cd /d "%SCRIPT_DIR%"
+)
+
 REM Start C# clients (delayed because dotnet takes time to load)
 if "%RUN_CSHARP%"=="true" (
     echo === Starting %NUM_CSHARP% C# clients [delayed 15s] ===
