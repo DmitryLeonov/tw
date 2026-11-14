@@ -273,12 +273,12 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 
 ## Logs
 
-- Server: `logs/server.log` (via `-log-file` flag)
+- Server: `logs/server.log` (controlled by `logs_dir` in `config.json`)
 - Clients: stdout (no file output)
 
-To enable server logging:
-```bash
-./twserver/bin/server -config config.json -log-file logs/server.log
+To change log directory, set `logs_dir` in `config.json`:
+```json
+{ "logs_dir": "logs" }
 ```
 
 ## Compatibility

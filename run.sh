@@ -65,7 +65,7 @@ done
 echo "=== Starting server ==="
 cd "$SERVER_DIR"
 if [ "$RUN_BOTS" = true ]; then
-  nohup "$SERVER_BIN" -config config.json -log-file "$LOGS_DIR/server.log" &
+  nohup "$SERVER_BIN" -config config.json &
   SERVER_PIDS+=($!)
   disown $!
   echo "Server PID: ${SERVER_PIDS[-1]} (bots enabled)"
@@ -82,7 +82,7 @@ else
   "bots": { "enabled": false }
 }
 EOF
-  nohup "$SERVER_BIN" -config /tmp/server_nobots.json -log-file "$LOGS_DIR/server.log" &
+  nohup "$SERVER_BIN" -config /tmp/server_nobots.json &
   SERVER_PIDS+=($!)
   echo "Server PID: ${SERVER_PIDS[-1]} (no bots — clients play)"
 fi

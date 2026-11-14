@@ -48,11 +48,11 @@ go build -o bin\server.exe .\cmd\server
 REM Start server
 echo === Starting server ===
 if "%RUN_BOTS%"=="true" (
-    start "TW Server" cmd /c "bin\server.exe -config config.json -log-file %LOGS_DIR%\server.log"
+    start "TW Server" cmd /c "bin\server.exe -config config.json"
     echo Server started [bots enabled]
 ) else (
     echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %LOGS_DIR%\server_nobots.json
-    start "TW Server" cmd /c "bin\server.exe -config %LOGS_DIR%\server_nobots.json -log-file %LOGS_DIR%\server.log"
+    start "TW Server" cmd /c "bin\server.exe -config %LOGS_DIR%\server_nobots.json"
     echo Server started [no bots — clients play]
 )
 

@@ -273,12 +273,12 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 
 ## Логи
 
-- Сервер: `logs/server.log` (флаг `-log-file`)
+- Сервер: `logs/server.log` (поле `logs_dir` в `config.json`)
 - Клиенты: stdout (без вывода в файлы)
 
-Для включения логирования сервера:
-```bash
-./twserver/bin/server -config config.json -log-file logs/server.log
+Чтобы изменить папку логов, установите `logs_dir` в `config.json`:
+```json
+{ "logs_dir": "logs" }
 ```
 
 ## Совместимость

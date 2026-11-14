@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -37,20 +38,8 @@ func (w *multiWriter) Write(p []byte) (n int, err error) {
 func main() {
 	// Command-line flags.
 	configPath := flag.String("config", "", "Path to JSON config file (optional)")
-	logFile := flag.String("log-file", "", "Path to log file (duplicates stdout)")
 	flag.Parse()
 	flag.CommandLine.Usage = func() {} // Suppress default usage
-
-	// Set up multi-writer for stdout + log file.
-	mw := &multiWriter{out: os.Stdout}
-	if *logFile != "" {
-		f, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.Fatalf("Failed to open log file: %v", err)
-		}
-		mw.file = f
-	}
-	log.SetOutput(mw)
 
 	port := env("PORT", "8080")
 	players := intEnv("MAX_PLAYERS", 20)
@@ -59,6 +48,7 @@ func main() {
 
 	var engine *game.Engine
 	var srv *server.Server
+	var mw *multiWriter
 
 	if *configPath != "" {
 		// Load JSON config.
@@ -68,6 +58,19 @@ func main() {
 		}
 		log.Printf("Loaded config from %s", *configPath)
 		log.Printf("MarkRate=%d MarkThreshold=%d", cfg.MarkRate, cfg.MarkThreshold)
+
+		// Set up multi-writer for stdout + log file from config.
+		mw = &multiWriter{out: os.Stdout}
+		if cfg.LogsDir != "" {
+			logPath := filepath.Join(cfg.LogsDir, "server.log")
+			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				log.Fatalf("Failed to open log file %s: %v", logPath, err)
+			}
+			mw.file = f
+			log.Printf("Logging to %s", logPath)
+		}
+		log.SetOutput(mw)
 
 		// Override with env vars if set.
 		if p := env("PORT", ""); p != "" {
