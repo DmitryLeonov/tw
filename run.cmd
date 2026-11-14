@@ -48,11 +48,11 @@ go build -o bin\server.exe .\cmd\server
 REM Start server
 echo === Starting server ===
 if "%RUN_BOTS%"=="true" (
-    start "TW Server" "%SERVER_DIR%\bin\server.exe" -config "%SERVER_DIR%\config.json"
+    start "" "%SERVER_DIR%\bin\server.exe" -config "%SERVER_DIR%\config.json"
     echo Server started [bots enabled]
 ) else (
     echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
-    start "TW Server" "%SERVER_DIR%\bin\server.exe" -config %TEMP%\server_nobots.json
+    start "" "%SERVER_DIR%\bin\server.exe" -config %TEMP%\server_nobots.json
     echo Server started [no bots — clients play]
 )
 
@@ -69,7 +69,7 @@ REM Start Go clients
 if "%RUN_GO%"=="true" (
     echo === Starting %NUM_GO% Go clients ===
     for /l %%i in (1,1,%NUM_GO%) do (
-        start "GoClient%%i" "%CLIENTS_DIR%\golang\bin\client.exe" --name GoClient%%i --config "%CLIENTS_DIR%\golang\config.json" --log-file "%LOGS_DIR%\go_client_%%i.log"
+        start "" "%CLIENTS_DIR%\golang\bin\client.exe" --name GoClient%%i --config "%CLIENTS_DIR%\golang\config.json" --log-file "%LOGS_DIR%\go_client_%%i.log"
         echo   GoClient%%i started
     )
 )
