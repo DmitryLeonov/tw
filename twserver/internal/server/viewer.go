@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"twserver/internal/game"
 )
@@ -49,18 +50,24 @@ func NewViewer(engine *game.Engine, botManager *BotManager) *Viewer {
 }
 
 // StartMonitoring begins watching for turn resolution events and broadcasting
-// state updates to all connected SSE clients.
+// state updates to all connected SSE clients. Also sends periodic state
+// broadcasts (every 5s) so the viewer stays current during idle periods
+// (e.g. while clients are connecting before game start).
 func (v *Viewer) StartMonitoring(ctx context.Context) {
 	if v == nil || ctx == nil {
 		return
 	}
 	go func() {
+		stateTicker := time.NewTicker(5 * time.Second)
+		defer stateTicker.Stop()
 		for {
 			_, signalCh := v.engine.TurnSignal()
 			select {
 			case <-signalCh:
 				v.broadcastState()
 				v.broadcastHistory()
+			case <-stateTicker.C:
+				v.broadcastState()
 			case <-ctx.Done():
 				return
 			}
