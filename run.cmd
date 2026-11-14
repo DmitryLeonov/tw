@@ -15,8 +15,6 @@ set "SCRIPT_DIR=%~dp0"
 set "SERVER_DIR=%SCRIPT_DIR%twserver"
 set "SERVER_BIN=%SERVER_DIR%\bin\server.exe"
 set "CLIENTS_DIR=%SCRIPT_DIR%twclients"
-set "LOGS_DIR=%SCRIPT_DIR%logs"
-if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 
 set NUM_GO=5
 set NUM_PYTHON=5
@@ -51,8 +49,8 @@ if "%RUN_BOTS%"=="true" (
     start "TW Server" cmd /c "bin\server.exe -config config.json"
     echo Server started [bots enabled]
 ) else (
-    echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %LOGS_DIR%\server_nobots.json
-    start "TW Server" cmd /c "bin\server.exe -config %LOGS_DIR%\server_nobots.json"
+    echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
+    start "TW Server" cmd /c "bin\server.exe -config %TEMP%\server_nobots.json"
     echo Server started [no bots — clients play]
 )
 
@@ -123,7 +121,7 @@ echo C# clients:    %NUM_CSHARP% instances
 if "%RUN_BOTS%"=="true" echo Bots:          %NUM_BOTS% enabled
 echo.
 echo Viewer: http://localhost:8080/viewer
-echo Logs:   %LOGS_DIR%\{server,go_client_*,python_client_*,csharp_client_*}.log
+echo Logs:   logs\server.log
 echo Press Ctrl+C to stop
 
 REM Keep script alive

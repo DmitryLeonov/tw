@@ -39,10 +39,6 @@ RUN_PYTHON=true
 RUN_CSHARP=true
 RUN_FORCE_START=false
 
-# Log directory (relative to project root)
-LOGS_DIR="$SCRIPT_DIR/logs"
-mkdir -p "$LOGS_DIR"
-
 # Arrays for PIDs
 declare -a SERVER_PIDS=()
 declare -a GO_PIDS=()
@@ -165,7 +161,7 @@ if [ "$RUN_BOTS" = true ]; then
 fi
 echo ""
 echo "Viewer: http://localhost:8080/viewer"
-echo "Logs:   logs/{server,go_client_*,python_client_*,csharp_client_*}.log"
+echo "Logs:   logs/server.log"
 echo "Press Ctrl+C to stop all"
 
 # Keep script alive without blocking on child exit
