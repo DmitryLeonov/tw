@@ -57,6 +57,15 @@ class GameLoop:
 
             # --- Main loop ---
             while not observation.game_over:
+                # Wait for game to start (turn > 0) before sending actions.
+                if observation.turn == 0:
+                    logger.info("Waiting for game to start (turn 0)...")
+                    await asyncio.sleep(1)
+                    observation = await self._wait_for_observation()
+                    if observation is None:
+                        return
+                    continue
+
                 # Decide action
                 action = self.strategy.decide(observation)
 

@@ -51,6 +51,9 @@ func NewViewer(engine *game.Engine, botManager *BotManager) *Viewer {
 // StartMonitoring begins watching for turn resolution events and broadcasting
 // state updates to all connected SSE clients.
 func (v *Viewer) StartMonitoring(ctx context.Context) {
+	if v == nil || ctx == nil {
+		return
+	}
 	go func() {
 		for {
 			_, signalCh := v.engine.TurnSignal()

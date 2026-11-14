@@ -50,6 +50,19 @@ public class GameLoop
                 Console.WriteLine(
                     $"[GAME] Turn {observation.Turn} | Score: {observation.Score} | Energy: {observation.Energy}");
 
+                // Wait for game to start (turn > 0) before sending actions.
+                if (observation.Turn == 0)
+                {
+                    Console.WriteLine("[INFO] Waiting for game to start (turn 0)...");
+                    await Task.Delay(1000, ct);
+                    observation = await _apiClient.GetObservationAsync(ct);
+                    if (observation.GameOver)
+                    {
+                        break;
+                    }
+                    continue;
+                }
+
                 // Delegate to strategy to decide action
                 var action = _strategy.Decide(observation);
 

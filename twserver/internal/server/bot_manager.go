@@ -43,7 +43,9 @@ func NewBotManager(engine *game.Engine, rm *RoundManager, agents []PlayerAgent) 
 // After Shutdown, a new context must be created via ResetContext() before
 // calling StartBotsOnDemand again.
 func (bm *BotManager) Shutdown() {
-	bm.cancel()
+	if bm.cancel != nil {
+		bm.cancel()
+	}
 	bm.wg.Wait()
 	bm.mu.Lock()
 	bm.bots = nil

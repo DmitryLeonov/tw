@@ -96,6 +96,11 @@ func (rm *RoundManager) SetResultsDir(dir string) {
 	rm.resultsDir = dir
 }
 
+// SetGameOverHandler sets the callback called when the game ends naturally.
+func (rm *RoundManager) SetGameOverHandler(h func()) {
+	rm.gameOverHandler = h
+}
+
 // Connect registers a new WebSocket connection for a player.
 // If the player already has a connection, the old one is invalidated
 // (its generation is superseded). Returns the outbound event channel
@@ -451,6 +456,11 @@ func (rm *RoundManager) broadcastGameOver() {
 			Message: "game has ended",
 		})
 	}
+
+	// Call the game over handler (e.g., prompt for Enter to stop).
+	if rm.gameOverHandler != nil {
+		rm.gameOverHandler()
+	}
 }
 
 // printResults prints the leaderboard to stdout and saves to a file.
@@ -577,7 +587,9 @@ func (rm *RoundManager) Restart() {
 
 // Shutdown gracefully stops the Round Manager.
 func (rm *RoundManager) Shutdown() {
-	rm.cancel()
+	if rm.cancel != nil {
+		rm.cancel()
+	}
 	rm.wg.Wait()
 }
 

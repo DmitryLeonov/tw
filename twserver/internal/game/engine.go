@@ -638,7 +638,11 @@ func (e *Engine) ClearPlayers() {
 	e.roundStarted = time.Now()
 
 	e.turnChangedMu.Lock()
-	close(e.turnChanged)
+	select {
+	case <-e.turnChanged:
+	default:
+		close(e.turnChanged)
+	}
 	e.turnChanged = make(chan struct{})
 	e.turnChangedMu.Unlock()
 

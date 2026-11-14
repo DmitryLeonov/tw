@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -76,6 +78,16 @@ func NewWithConfig(e *game.Engine, cfg *GameConfig) *Server {
 		gameStarted:    gameStarted,
 	}
 
+	// Set game over handler: prompt Enter to stop.
+	rm.SetGameOverHandler(func() {
+		fmt.Println("\n=== Game over. Press Enter to stop the server. ===")
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		fmt.Println("Stopping server...")
+		s.StopGame()
+		fmt.Println("Server stopped. Waiting for start.")
+	})
+
 	v.StartMonitoring(ctx)
 
 	return s
@@ -116,12 +128,11 @@ func (s *Server) StopGame() {
 	// 3. Stop the RoundManager event loop.
 	s.rounds.Stop()
 
-	// 4. Reset engine state.
+	// 4. Reset engine state (single call — does NOT set stopped flag).
 	s.engine.Reset()
-	s.engine.ResetStopped()
-	s.engine.ClearPlayers()
 
-	// 5. Create a fresh gameStarted channel.
+	// 5. Clear players and recreate gameStarted channel.
+	s.engine.ClearPlayers()
 	s.ResetGameStarted()
 
 	// 6. Shutdown old bots.
@@ -131,11 +142,16 @@ func (s *Server) StopGame() {
 	// 7. Restart the RoundManager event loop.
 	s.rounds.Restart()
 
-	// 8. Recreate shutdown context and restart Viewer monitoring.
+	// 8. Allow new player registrations.
+	s.engine.ResetStopped()
+
+	// 9. Recreate shutdown context and restart Viewer monitoring.
 	ctx, cancel := context.WithCancel(context.Background())
 	s.shutdownCtx = ctx
 	s.shutdownCancel = cancel
-	s.viewer.StartMonitoring(ctx)
+	if s.viewer != nil {
+		s.viewer.StartMonitoring(ctx)
+	}
 }
 
 // PauseHTTP handles POST /api/v1/pause — stops the event loop from processing actions.
@@ -172,7 +188,6 @@ func (s *Server) Resume() {
 // Creates a fresh gameStarted channel shared between Server and RoundManager
 // so that StartGame() can close it again after a stop/reset.
 func (s *Server) ResetGameStarted() {
-	s.engine.Reset()
 	ch := make(chan struct{})
 	s.rounds.SetGameStarted(ch)
 	s.gameStarted = ch

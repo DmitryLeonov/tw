@@ -207,6 +207,13 @@ func (l *Loop) runOnConnection(ctx context.Context, conn *websocket.Conn, obs *m
 			break
 		}
 
+		// Wait for game to start (turn > 0) before sending actions.
+		if obs.Turn == 0 {
+			l.logger.Info("waiting for game to start (turn 0)...")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
 		// Decide action.
 		action := l.strategy.Decide(obs)
 
