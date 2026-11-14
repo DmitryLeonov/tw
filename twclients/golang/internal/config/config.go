@@ -14,6 +14,7 @@ type Config struct {
 	PlayerName  string        `json:"player_name"`
 	HTTPTimeout time.Duration `json:"http_timeout"`
 	LogLevel    string        `json:"log_level"`
+	LogFile     string        `json:"log_file"`
 	Strategy    string        `json:"strategy"`
 	MaxRetries  int           `json:"max_retries"`
 }

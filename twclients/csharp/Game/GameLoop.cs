@@ -28,7 +28,7 @@ public class GameLoop
     /// </summary>
     public async Task RunAsync(CancellationToken ct)
     {
-        Console.WriteLine("[GAME] Starting game loop...");
+        Logger.WriteLine("[GAME] Starting game loop...");
 
         int reconnects = 0;
         int maxReconnects = _maxRetries;
@@ -43,17 +43,17 @@ public class GameLoop
                 // Check if game is over
                 if (observation.GameOver)
                 {
-                    Console.WriteLine($"[GAME] Game over! Final score: {observation.Score}");
+                    Logger.WriteLine($"[GAME] Game over! Final score: {observation.Score}");
                     break;
                 }
 
-                Console.WriteLine(
+                Logger.WriteLine(
                     $"[GAME] Turn {observation.Turn} | Score: {observation.Score} | Energy: {observation.Energy}");
 
                 // Wait for game to start (turn > 0) before sending actions.
                 if (observation.Turn == 0)
                 {
-                    Console.WriteLine("[INFO] Waiting for game to start (turn 0)...");
+                    Logger.WriteLine("[INFO] Waiting for game to start (turn 0)...");
                     await Task.Delay(1000, ct);
                     observation = await _apiClient.GetObservationAsync(ct);
                     if (observation.GameOver)
@@ -77,7 +77,7 @@ public class GameLoop
                     };
 
                     await _apiClient.SubmitActionAsync(message, ct);
-                    Console.WriteLine($"[INFO] Submitted action: {action.Type} → ({action.Target.X}, {action.Target.Y})");
+                    Logger.WriteLine($"[INFO] Submitted action: {action.Type} → ({action.Target.X}, {action.Target.Y})");
 
                     // Wait for server response via WebSocket (ERROR or ACTION_ACCEPTED).
                     // This is critical: without it, we never detect rejected actions
@@ -86,7 +86,7 @@ public class GameLoop
 
                     if (response.Rejected)
                     {
-                        Console.WriteLine($"[GAME] Action rejected: {response.Reason}. Re-deciding...");
+                        Logger.WriteLine($"[GAME] Action rejected: {response.Reason}. Re-deciding...");
                         // Re-fetch observation to get fresh state
                         observation = await _apiClient.GetObservationAsync(ct);
                         // Continue loop to re-decide
@@ -95,7 +95,7 @@ public class GameLoop
                 }
                 else
                 {
-                    Console.WriteLine("[GAME] Strategy chose to pass.");
+                    Logger.WriteLine("[GAME] Strategy chose to pass.");
                 }
 
                 // Wait for turn resolution by polling observations.
@@ -107,7 +107,7 @@ public class GameLoop
                     observation = await _apiClient.GetObservationAsync(ct);
                     if (observation.Turn != currentTurn)
                     {
-                        Console.WriteLine(
+                        Logger.WriteLine(
                             $"[GAME] Turn resolved: {currentTurn} → {observation.Turn} | Score: {observation.Score}");
                     }
                 }
@@ -115,12 +115,12 @@ public class GameLoop
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("[GAME] Game loop cancelled.");
+                Logger.WriteLine("[GAME] Game loop cancelled.");
                 break;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[GAME] Error in game loop: {ex.Message}");
+                Logger.WriteLine($"[GAME] Error in game loop: {ex.Message}");
                 reconnects++;
 
                 // Check if it's a WebSocket connection error — try reconnecting
@@ -128,10 +128,10 @@ public class GameLoop
                     ex.Message.Contains("connection") ||
                     ex.Message.Contains("Connection"))
                 {
-                    Console.WriteLine("[GAME] WebSocket disconnected, reconnecting...");
+                    Logger.WriteLine("[GAME] WebSocket disconnected, reconnecting...");
                     if (reconnects >= maxReconnects)
                     {
-                        Console.WriteLine($"[GAME] Max reconnects reached ({maxReconnects}), stopping.");
+                        Logger.WriteLine($"[GAME] Max reconnects reached ({maxReconnects}), stopping.");
                         break;
                     }
                     try
@@ -139,21 +139,21 @@ public class GameLoop
                         await _apiClient.ConnectWebSocketAsync(ct);
                         // Re-fetch observation to get current state
                         var observation = await _apiClient.GetObservationAsync(ct);
-                        Console.WriteLine($"[GAME] Reconnected at turn {observation.Turn}");
+                        Logger.WriteLine($"[GAME] Reconnected at turn {observation.Turn}");
                         continue;
                     }
                     catch (Exception reconnectEx)
                     {
-                        Console.WriteLine($"[GAME] Reconnect failed ({reconnectEx.Message}), trying re-join...");
+                        Logger.WriteLine($"[GAME] Reconnect failed ({reconnectEx.Message}), trying re-join...");
                         // Re-join with a fresh token (happens after game reset).
                         try
                         {
                             var joinResp = await _apiClient.JoinAsync(_apiClient.PlayerName, ct);
                             _apiClient.UpdateToken(joinResp.Token);
-                            Console.WriteLine($"[GAME] Re-joined game, player_id={joinResp.PlayerId}");
+                            Logger.WriteLine($"[GAME] Re-joined game, player_id={joinResp.PlayerId}");
                             await _apiClient.ConnectWebSocketAsync(ct);
                             var observation = await _apiClient.GetObservationAsync(ct);
-                            Console.WriteLine($"[GAME] Reconnected at turn {observation.Turn}");
+                            Logger.WriteLine($"[GAME] Reconnected at turn {observation.Turn}");
                             continue;
                         }
                         catch (Exception joinEx)
@@ -163,10 +163,10 @@ public class GameLoop
                                 errStr.Contains("game stopped") ||
                                 errStr.Contains("match is full"))
                             {
-                                Console.WriteLine("[GAME] Registration closed — game cannot continue, exiting");
+                                Logger.WriteLine("[GAME] Registration closed — game cannot continue, exiting");
                                 break;
                             }
-                            Console.WriteLine($"[GAME] Re-join also failed: {joinEx.Message}");
+                            Logger.WriteLine($"[GAME] Re-join also failed: {joinEx.Message}");
                             await Task.Delay(5000, ct);
                             continue;
                         }
@@ -178,6 +178,6 @@ public class GameLoop
             }
         }
 
-        Console.WriteLine("[GAME] Game loop finished.");
+        Logger.WriteLine("[GAME] Game loop finished.");
     }
 }

@@ -82,6 +82,7 @@ def build_config(args: argparse.Namespace) -> Dict[str, Any]:
         "player_name": "StudentBot",
         "http_timeout": 10,
         "log_level": "INFO",
+        "log_file": "",
         "strategy": "simple",
         "max_retries": 10,
     }
@@ -100,9 +101,22 @@ def build_config(args: argparse.Namespace) -> Dict[str, Any]:
     return config
 
 
-def setup_logging(level: str) -> None:
-    """Configure the logging system."""
+def setup_logging(level: str, log_file: str = "") -> None:
+    """Configure the logging system with optional file output."""
     numeric_level = getattr(logging, level.upper(), logging.INFO)
+
+    if log_file:
+        from pathlib import Path
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(numeric_level)
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+        # Also add file handler to root logger
+        logging.getLogger().addHandler(file_handler)
+
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -155,7 +169,7 @@ def main() -> int:
     args = parse_args()
     config = build_config(args)
 
-    setup_logging(config.get("log_level", "INFO"))
+    setup_logging(config.get("log_level", "INFO"), config.get("log_file", ""))
     logger.info("Territory Wars Python Client v1.0.0")
     logger.info("Config: %s", config)
 

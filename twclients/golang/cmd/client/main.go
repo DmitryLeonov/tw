@@ -4,10 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"twclient/internal/api"
@@ -15,6 +18,24 @@ import (
 	"twclient/internal/game"
 	"twclient/internal/strategy"
 )
+
+// multiWriter writes slog output to both stdout and a log file.
+type multiWriter struct {
+	mu   sync.Mutex
+	out  io.Writer
+	file io.Writer
+}
+
+func (w *multiWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file != nil {
+		if _, ferr := w.file.Write(p); ferr != nil {
+			return 0, ferr
+		}
+	}
+	return w.out.Write(p)
+}
 
 func main() {
 	// Command-line flags override config file values.
@@ -43,7 +64,7 @@ func main() {
 	}
 
 	// Set up logger.
-	logger := setupLogger(cfg.LogLevel)
+	logger := setupLogger(cfg.LogLevel, cfg.LogFile)
 
 	logger.Info("starting Territory Wars client",
 		"server", cfg.Server,
@@ -84,8 +105,9 @@ func main() {
 	logger.Info("client exiting successfully")
 }
 
-// setupLogger creates a slog.Logger configured with the given log level.
-func setupLogger(level string) *slog.Logger {
+// setupLogger creates a slog.Logger configured with the given log level
+// and optional log file. Output is duplicated to both stdout and the file.
+func setupLogger(level string, logFile string) *slog.Logger {
 	var logLevel slog.Level
 	switch strings.ToUpper(level) {
 	case "DEBUG":
@@ -98,7 +120,21 @@ func setupLogger(level string) *slog.Logger {
 		logLevel = slog.LevelInfo
 	}
 
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	mw := &multiWriter{out: os.Stdout}
+	if logFile != "" {
+		dir := filepath.Dir(logFile)
+		if dir != "" && dir != "." {
+			os.MkdirAll(dir, 0755)
+		}
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: cannot open log file %s: %v\n", logFile, err)
+		} else {
+			mw.file = f
+		}
+	}
+
+	return slog.New(slog.NewTextHandler(mw, &slog.HandlerOptions{
 		Level: logLevel,
 	}))
 }

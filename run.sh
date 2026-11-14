@@ -98,7 +98,7 @@ if [ "$RUN_GO" = true ]; then
   echo "=== Starting $NUM_GO Go clients ==="
   cd "$CLIENTS_DIR/golang"
   for i in $(seq 1 $NUM_GO); do
-    nohup ./bin/client --name "GoClient$i" --config config.json &
+    nohup ./bin/client --name "GoClient$i" --config config.json --log-file "logs/go_client_$i.log" &
     GO_PIDS+=($!)
     disown $!
     echo "  GoClient$i PID: ${GO_PIDS[-1]}"
@@ -111,7 +111,7 @@ if [ "$RUN_PYTHON" = true ]; then
   cd "$CLIENTS_DIR/python"
   if [ -n "$UV_BIN" ]; then
     for i in $(seq 1 $NUM_PYTHON); do
-      PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json &
+      PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json --log-file "logs/python_client_$i.log" &
       PYTHON_PIDS+=($!)
       disown $!
       echo "  PythonClient$i PID: ${PYTHON_PIDS[-1]}"
@@ -132,6 +132,7 @@ if [ "$RUN_CSHARP" = true ]; then
         --config config.json \
         --name "CSharpClient$i" \
         --strategy simple \
+        --log-file "logs/csharp_client_$i.log" \
         &
       CSHARP_PIDS+=($!)
       disown $!
@@ -161,7 +162,7 @@ if [ "$RUN_BOTS" = true ]; then
 fi
 echo ""
 echo "Viewer: http://localhost:8080/viewer"
-echo "Logs:   logs/server.log"
+echo "Logs:   logs/{server,go_client_*,python_client_*,csharp_client_*}.log"
 echo "Press Ctrl+C to stop all"
 
 # Keep script alive without blocking on child exit

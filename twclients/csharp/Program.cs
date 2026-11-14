@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using TerritoryWars;
 using TerritoryWars.Api;
 using TerritoryWars.Game;
 using TerritoryWars.Models;
@@ -13,6 +14,7 @@ var configPath = "config.json";
 string? serverUrl = null;
 string? playerName = null;
 string strategyName = "Simple";
+string? logFile = null;
 
 for (var i = 0; i < commandArgs.Length; i++)
 {
@@ -32,6 +34,10 @@ for (var i = 0; i < commandArgs.Length; i++)
             break;
         case "--strategy":
             if (i + 2 <= commandArgs.Length) strategyName = commandArgs[i + 1];
+            i++;
+            break;
+        case "--log-file":
+            if (i + 2 <= commandArgs.Length) logFile = commandArgs[i + 1];
             i++;
             break;
     }
@@ -63,18 +69,24 @@ var maxRetries = int.Parse(
     configuration["MaxRetries"]
     ?? "10");
 
-Console.WriteLine($"[CONFIG] Server: {baseUrl}");
-Console.WriteLine($"[CONFIG] Player: {name}");
-Console.WriteLine($"[CONFIG] Strategy: {strategyName}");
-Console.WriteLine($"[CONFIG] Timeout: {timeoutSeconds}s");
-Console.WriteLine($"[CONFIG] Log Level: {logLevel}");
-Console.WriteLine($"[CONFIG] Max Retries: {maxRetries}");
+var logFilePath = configuration["LogFile"]
+                  ?? logFile;
+
+// Initialize dual writer for Console + log file
+Logger.Init(logFilePath);
+
+Logger.WriteLine($"[CONFIG] Server: {baseUrl}");
+Logger.WriteLine($"[CONFIG] Player: {name}");
+Logger.WriteLine($"[CONFIG] Strategy: {strategyName}");
+Logger.WriteLine($"[CONFIG] Timeout: {timeoutSeconds}s");
+Logger.WriteLine($"[CONFIG] Log Level: {logLevel}");
+Logger.WriteLine($"[CONFIG] Max Retries: {maxRetries}");
 
 // Create cancellation token for Ctrl+C handling
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (sender, e) =>
 {
-    Console.WriteLine("\n[CTRL+C] Shutting down...");
+    Logger.WriteLine("\n[CTRL+C] Shutting down...");
     cts.Cancel();
     e.Cancel = true; // Prevent immediate termination to allow graceful shutdown
 };
@@ -88,7 +100,7 @@ IGameStrategy strategy = strategyName.ToLower() switch
 };
 
 // Register player with the server
-Console.WriteLine("[AUTH] Registering player...");
+Logger.WriteLine("[AUTH] Registering player...");
 using var httpClient = new HttpClient
 {
     Timeout = TimeSpan.FromSeconds(timeoutSeconds)
@@ -116,7 +128,7 @@ var joinResult = System.Text.Json.JsonSerializer.Deserialize<JoinResponse>(
     joinJsonResult, joinResultOptions)
     ?? throw new InvalidOperationException("Failed to parse join response.");
 
-Console.WriteLine($"[AUTH] Registered as {joinResult.PlayerId}");
+Logger.WriteLine($"[AUTH] Registered as {joinResult.PlayerId}");
 
 // Create API client with token
 var apiClient = new GameApiClient(
@@ -135,4 +147,4 @@ await gameLoop.RunAsync(cts.Token);
 apiClient.Dispose();
 httpClient.Dispose();
 
-Console.WriteLine("[EXIT] Client shut down gracefully.");
+Logger.WriteLine("[EXIT] Client shut down gracefully.");

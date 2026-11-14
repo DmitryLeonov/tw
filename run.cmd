@@ -15,6 +15,8 @@ set "SCRIPT_DIR=%~dp0"
 set "SERVER_DIR=%SCRIPT_DIR%twserver"
 set "SERVER_BIN=%SERVER_DIR%\bin\server.exe"
 set "CLIENTS_DIR=%SCRIPT_DIR%twclients"
+set "LOGS_DIR=%SCRIPT_DIR%logs"
+if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 
 set NUM_GO=5
 set NUM_PYTHON=5
@@ -68,7 +70,7 @@ if "%RUN_GO%"=="true" (
     echo === Starting %NUM_GO% Go clients ===
     cd /d "%CLIENTS_DIR%\golang"
     for /l %%i in (1,1,%NUM_GO%) do (
-        start "GoClient%%i" cmd /c "bin\client.exe --name GoClient%%i --config config.json"
+        start "GoClient%%i" cmd /c "bin\client.exe --name GoClient%%i --config config.json --log-file %LOGS_DIR%\go_client_%%i.log"
         echo   GoClient%%i started
     )
 )
@@ -78,7 +80,7 @@ if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     cd /d "%CLIENTS_DIR%\python"
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "PythonClient%%i" cmd /c "uv run python main.py --name PythonClient%%i --config config.json"
+        start "PythonClient%%i" cmd /c "uv run python main.py --name PythonClient%%i --config config.json --log-file %LOGS_DIR%\python_client_%%i.log"
         echo   PythonClient%%i started
     )
 )
@@ -89,7 +91,7 @@ if "%RUN_CSHARP%"=="true" (
     timeout /t 15 /nobreak >nul
     cd /d "%CLIENTS_DIR%\csharp"
     for /l %%i in (1,1,%NUM_CSHARP%) do (
-        start "CSharpClient%%i" cmd /c "dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple"
+        start "CSharpClient%%i" cmd /c "dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple --log-file %LOGS_DIR%\csharp_client_%%i.log"
         echo   CSharpClient%%i started
     )
 )
@@ -121,7 +123,7 @@ echo C# clients:    %NUM_CSHARP% instances
 if "%RUN_BOTS%"=="true" echo Bots:          %NUM_BOTS% enabled
 echo.
 echo Viewer: http://localhost:8080/viewer
-echo Logs:   logs\server.log
+echo Logs:   %LOGS_DIR%\{server,go_client_*,python_client_*,csharp_client_*}.log
 echo Press Ctrl+C to stop
 
 REM Keep script alive
