@@ -200,21 +200,37 @@ func (rm *RoundManager) run() {
 	// Timeout: nil means no timeout is active.
 	var timeoutCh <-chan time.Time
 
+	// Heartbeat ticker — broadcast STILL_ALIVE every 3s so clients
+	// know the server is alive even when no turns are resolving.
+	// This must be created BEFORE the gameStarted wait so idle clients
+	// don't time out while waiting for the game to start.
+	heartbeat := time.NewTicker(3 * time.Second)
+	defer heartbeat.Stop()
+
 	// Wait for registration delay to expire before allowing the first turn.
 	// Also listen for ctx cancellation so Stop() can unblock this.
-	select {
-	case <-rm.gameStarted:
-	case <-rm.ctx.Done():
-		return
+	// Include heartbeat so idle clients don't time out while waiting.
+	for {
+		select {
+		case <-rm.gameStarted:
+			goto mainLoop
+		case <-rm.ctx.Done():
+			return
+		case <-heartbeat.C:
+			// Broadcast STILL_ALIVE to all connected clients (waiting for game start).
+			players := rm.engine.Leaderboard()
+			for _, p := range players {
+				rm.enqueue(p.ID, game.Event{
+					Type:    "STILL_ALIVE",
+					Message: "server alive",
+				})
+			}
+		}
 	}
+mainLoop:
 
 	// Signal that the main loop has started — game is actually processing now.
 	close(rm.ready)
-
-	// Heartbeat ticker — broadcast STILL_ALIVE every 10s so clients
-	// know the server is alive even when no turns are resolving.
-	heartbeat := time.NewTicker(10 * time.Second)
-	defer heartbeat.Stop()
 
 	for {
 		rm.pauseMu.Lock()
@@ -413,7 +429,7 @@ func (rm *RoundManager) run() {
 			}
 
 		case <-heartbeat.C:
-			// Broadcast STILL_ALIVE to all connected clients.
+			// Broadcast STILL_ALIVE to all connected clients (during game).
 			players := rm.engine.Leaderboard()
 			for _, p := range players {
 				rm.enqueue(p.ID, game.Event{

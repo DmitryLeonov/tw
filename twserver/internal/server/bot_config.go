@@ -27,6 +27,7 @@ type GameConfig struct {
 	Height            int    `json:"height"`
 	TurnDelay       string `json:"turn_delay"`
 	ResultsDir        string `json:"results_dir"`
+	LogsDir           string `json:"logs_dir"`
 	MarkRate          int    `json:"mark_rate"`
 	MarkThreshold     int    `json:"mark_threshold"`
 	BotsEnabled       bool   `json:"bots_enabled"`
@@ -63,6 +64,10 @@ func LoadConfig(path string) (*GameConfig, error) {
 	// Resolve results_dir relative to the config file's directory.
 	if cfg.ResultsDir != "" && !filepath.IsAbs(cfg.ResultsDir) {
 		cfg.ResultsDir = filepath.Join(filepath.Dir(path), cfg.ResultsDir)
+	}
+	// Resolve logs_dir relative to the config file's directory.
+	if cfg.LogsDir != "" && !filepath.IsAbs(cfg.LogsDir) {
+		cfg.LogsDir = filepath.Join(filepath.Dir(path), cfg.LogsDir)
 	}
 	if cfg.MarkRate <= 0 {
 		cfg.MarkRate = 10

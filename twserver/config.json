@@ -6,6 +6,7 @@
   "height": 40,
   "turn_delay": "1s",
   "results_dir": "results",
+  "logs_dir": ".logs",
   "mark_rate": 10,
   "mark_threshold": 5,
   "bots_enabled": true

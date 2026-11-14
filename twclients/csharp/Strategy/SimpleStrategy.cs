@@ -33,7 +33,9 @@ public class SimpleStrategy : IGameStrategy
 
         // Find weakest cell health for defensive awareness.
         var weakestCell = myCells.OrderBy(c => c.Health).FirstOrDefault();
-        var weakestHealth = weakestCell?.Health ?? 999;
+        if (weakestCell == null)
+            return new TerritoryWars.Models.Action { Type = "pass" };
+        var weakestHealth = weakestCell.Health;
 
         // Build a set of cells adjacent to our owned cells
         var adjacentCells = GetAdjacentCells(myCells, observation);

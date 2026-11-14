@@ -137,7 +137,7 @@ class GameLoop:
             return None
 
         while True:
-            event = await self.api_client.receive_event(timeout=5.0)
+            event = await self.api_client.receive_event(timeout=10.0)
             if event is None:
                 logger.warning("Timeout waiting for event")
                 return None

@@ -178,19 +178,19 @@ ws://localhost:8080/ws?token=ВАШ_ТОКЕН
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./bin/client --name "GoClient$i" > /tmp/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" > .logs/go_client_$i.log 2>&1 &
 done
 
 # Python
 cd twclients/python
 for i in 1 2 3 4 5; do
-  uv run python main.py --name "PythonClient$i" > /tmp/python_client_$i.log 2>&1 &
+  uv run python main.py --name "PythonClient$i" > .logs/python_client_$i.log 2>&1 &
 done
 
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > .logs/csharp_client_$i.log 2>&1 &
 done
 ```
 
@@ -273,10 +273,10 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 
 ## Логи
 
-- Сервер: `/tmp/server.log`
-- Go-клиенты: `/tmp/go_client_{1-5}.log`
-- Python-клиенты: `/tmp/python_client_{1-5}.log`
-- C#-клиенты: `/tmp/csharp_client_{1-5}.log`
+- Сервер: `.logs/server.log`
+- Go-клиенты: `.logs/go_client_{1-5}.log`
+- Python-клиенты: `.logs/python_client_{1-5}.log`
+- C#-клиенты: `.logs/csharp_client_{1-5}.log`
 
 ## Совместимость
 
