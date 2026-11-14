@@ -78,7 +78,7 @@ REM Start Python clients
 if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "" "%CLIENTS_DIR%\python\run_client.bat" --name PythonClient%%i --config "%CLIENTS_DIR%\python\config.json" --log-file "%LOGS_DIR%\python_client_%%i.log"
+        start "" "%CLIENTS_DIR%\python\run.cmd" --name PythonClient%%i --config "%CLIENTS_DIR%\python\config.json" --log-file "%LOGS_DIR%\python_client_%%i.log"
         echo   PythonClient%%i started
     )
 )
@@ -88,7 +88,7 @@ if "%RUN_CSHARP%"=="true" (
     echo === Starting %NUM_CSHARP% C# clients [delayed 15s] ===
     timeout /t 15 /nobreak >nul
     for /l %%i in (1,1,%NUM_CSHARP%) do (
-        start "" "%CLIENTS_DIR%\csharp\run_client.bat" --name CSharpClient%%i --config "%CLIENTS_DIR%\csharp\config.json" --strategy simple --log-file "%LOGS_DIR%\csharp_client_%%i.log"
+        start "" "%CLIENTS_DIR%\csharp\run.cmd" --name CSharpClient%%i --config "%CLIENTS_DIR%\csharp\config.json" --strategy simple --log-file "%LOGS_DIR%\csharp_client_%%i.log"
         echo   CSharpClient%%i started
     )
 )
