@@ -47,11 +47,11 @@ REM Start server
 echo === Starting server ===
 if "%RUN_BOTS%"=="true" (
     start "TW Server" cmd /c "bin\server.exe -config config.json"
-    echo Server started (bots enabled)
+    echo Server started [bots enabled]
 ) else (
     echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
     start "TW Server" cmd /c "bin\server.exe -config %TEMP%\server_nobots.json"
-    echo Server started (no bots — clients play)
+    echo Server started [no bots — clients play]
 )
 
 REM Wait for server
@@ -85,7 +85,7 @@ if "%RUN_PYTHON%"=="true" (
 
 REM Start C# clients (delayed because dotnet takes time to load)
 if "%RUN_CSHARP%"=="true" (
-    echo === Starting %NUM_CSHARP% C# clients (delayed 15s) ===
+    echo === Starting %NUM_CSHARP% C# clients [delayed 15s] ===
     timeout /t 15 /nobreak >nul
     cd /d "%CLIENTS_DIR%\csharp"
     for /l %%i in (1,1,%NUM_CSHARP%) do (
@@ -96,7 +96,7 @@ if "%RUN_CSHARP%"=="true" (
 
 REM If --force-start, wait for clients to register then start the game
 if "%RUN_FORCE_START%"=="true" (
-    echo === Waiting for clients to register (15s) ===
+    echo === Waiting for clients to register [15s] ===
     timeout /t 15 /nobreak >nul
     echo === Starting game manually ===
     curl -s -X POST http://localhost:8080/api/v1/start
@@ -105,7 +105,7 @@ if "%RUN_FORCE_START%"=="true" (
 
 REM If no bots, wait for clients to register then start the game
 if "%RUN_BOTS%"=="false" (
-    echo === Waiting for clients to register (15s) ===
+    echo === Waiting for clients to register [15s] ===
     timeout /t 15 /nobreak >nul
     echo === Starting game manually ===
     curl -s -X POST http://localhost:8080/api/v1/start
