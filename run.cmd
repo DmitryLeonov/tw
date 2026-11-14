@@ -48,11 +48,11 @@ go build -o bin\server.exe .\cmd\server
 REM Start server
 echo === Starting server ===
 if "%RUN_BOTS%"=="true" (
-    start "" "%SERVER_DIR%\bin\server.exe" -config "%SERVER_DIR%\config.json"
+    start "TW Server" cmd /c "\"%SERVER_DIR%\bin\server.exe\" -config \"%SERVER_DIR%\config.json\""
     echo Server started [bots enabled]
 ) else (
     echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
-    start "" "%SERVER_DIR%\bin\server.exe" -config %TEMP%\server_nobots.json
+    start "TW Server" cmd /c "\"%SERVER_DIR%\bin\server.exe\" -config %TEMP%\server_nobots.json"
     echo Server started [no bots — clients play]
 )
 
@@ -69,7 +69,7 @@ REM Start Go clients
 if "%RUN_GO%"=="true" (
     echo === Starting %NUM_GO% Go clients ===
     for /l %%i in (1,1,%NUM_GO%) do (
-        start "" "%CLIENTS_DIR%\golang\bin\client.exe" --name GoClient%%i --config "%CLIENTS_DIR%\golang\config.json" --log-file "%LOGS_DIR%\go_client_%%i.log"
+        start "GoClient%%i" cmd /c "\"%CLIENTS_DIR%\golang\bin\client.exe\" --name GoClient%%i --config \"%CLIENTS_DIR%\golang\config.json\" --log-file \"%LOGS_DIR%\go_client_%%i.log\""
         echo   GoClient%%i started
     )
 )
@@ -78,7 +78,7 @@ REM Start Python clients
 if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "" "%CLIENTS_DIR%\python\run.cmd" --name PythonClient%%i --config "%CLIENTS_DIR%\python\config.json" --log-file "%LOGS_DIR%\python_client_%%i.log"
+        start "PythonClient%%i" cmd /c "cd /d \"%CLIENTS_DIR%\python\" && uv run python main.py --name PythonClient%%i --config \"%CLIENTS_DIR%\python\config.json\" --log-file \"%LOGS_DIR%\python_client_%%i.log\""
         echo   PythonClient%%i started
     )
 )
@@ -88,7 +88,7 @@ if "%RUN_CSHARP%"=="true" (
     echo === Starting %NUM_CSHARP% C# clients [delayed 15s] ===
     timeout /t 15 /nobreak >nul
     for /l %%i in (1,1,%NUM_CSHARP%) do (
-        start "" "%CLIENTS_DIR%\csharp\run.cmd" --name CSharpClient%%i --config "%CLIENTS_DIR%\csharp\config.json" --strategy simple --log-file "%LOGS_DIR%\csharp_client_%%i.log"
+        start "CSharpClient%%i" cmd /c "cd /d \"%CLIENTS_DIR%\csharp\" && dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --name CSharpClient%%i --config \"%CLIENTS_DIR%\csharp\config.json\" --strategy simple --log-file \"%LOGS_DIR%\csharp_client_%%i.log\""
         echo   CSharpClient%%i started
     )
 )
