@@ -159,19 +159,19 @@ go build -o bin/client ./cmd/client/
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./bin/client --name "GoClient$i" > .logs/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" > logs/go_client_$i.log 2>&1 &
 done
 
 # Python
 cd twclients/python
 for i in 1 2 3 4 5; do
-  uv run python main.py --name "PythonClient$i" > .logs/python_client_$i.log 2>&1 &
+  uv run python main.py --name "PythonClient$i" > logs/python_client_$i.log 2>&1 &
 done
 
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > .logs/csharp_client_$i.log 2>&1 &
+  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > logs/csharp_client_$i.log 2>&1 &
 done
 ```
 
