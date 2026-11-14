@@ -48,11 +48,11 @@ go build -o bin\server.exe .\cmd\server
 REM Start server
 echo === Starting server ===
 if "%RUN_BOTS%"=="true" (
-    start "TW Server" cmd /c "bin\server.exe -config config.json > %LOGS_DIR%\server.log 2>&1"
+    start "TW Server" powershell -NoProfile -Command "bin\server.exe -config config.json 2>&1 | Tee-Object -FilePath '%LOGS_DIR%\server.log'"
     echo Server started [bots enabled]
 ) else (
     echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %LOGS_DIR%\server_nobots.json
-    start "TW Server" cmd /c "bin\server.exe -config %LOGS_DIR%\server_nobots.json > %LOGS_DIR%\server.log 2>&1"
+    start "TW Server" powershell -NoProfile -Command "bin\server.exe -config %LOGS_DIR%\server_nobots.json 2>&1 | Tee-Object -FilePath '%LOGS_DIR%\server.log'"
     echo Server started [no bots — clients play]
 )
 
@@ -70,7 +70,7 @@ if "%RUN_GO%"=="true" (
     echo === Starting %NUM_GO% Go clients ===
     cd /d "%CLIENTS_DIR%\golang"
     for /l %%i in (1,1,%NUM_GO%) do (
-        start "GoClient%%i" cmd /c "bin\client.exe --name GoClient%%i --config config.json > %LOGS_DIR%\go_client_%%i.log 2>&1"
+        start "GoClient%%i" powershell -NoProfile -Command "bin\client.exe --name GoClient%%i --config config.json 2>&1 | Tee-Object -FilePath '%LOGS_DIR%\go_client_%%i.log'"
         echo   GoClient%%i started
     )
 )
@@ -80,7 +80,7 @@ if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     cd /d "%CLIENTS_DIR%\python"
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "PythonClient%%i" cmd /c "uv run python main.py --name PythonClient%%i --config config.json > %LOGS_DIR%\python_client_%%i.log 2>&1"
+        start "PythonClient%%i" powershell -NoProfile -Command "uv run python main.py --name PythonClient%%i --config config.json 2>&1 | Tee-Object -FilePath '%LOGS_DIR%\python_client_%%i.log'"
         echo   PythonClient%%i started
     )
 )
@@ -91,7 +91,7 @@ if "%RUN_CSHARP%"=="true" (
     timeout /t 15 /nobreak >nul
     cd /d "%CLIENTS_DIR%\csharp"
     for /l %%i in (1,1,%NUM_CSHARP%) do (
-        start "CSharpClient%%i" cmd /c "dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple > %LOGS_DIR%\csharp_client_%%i.log 2>&1"
+        start "CSharpClient%%i" powershell -NoProfile -Command "dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple 2>&1 | Tee-Object -FilePath '%LOGS_DIR%\csharp_client_%%i.log'"
         echo   CSharpClient%%i started
     )
 )

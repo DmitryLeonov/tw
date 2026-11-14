@@ -65,7 +65,7 @@ done
 echo "=== Starting server ==="
 cd "$SERVER_DIR"
 if [ "$RUN_BOTS" = true ]; then
-  nohup "$SERVER_BIN" -config config.json > "$LOGS_DIR/server.log" 2>&1 &
+  nohup "$SERVER_BIN" -config config.json 2>&1 | tee "$LOGS_DIR/server.log" &
   SERVER_PIDS+=($!)
   disown $!
   echo "Server PID: ${SERVER_PIDS[-1]} (bots enabled)"
@@ -82,7 +82,7 @@ else
   "bots": { "enabled": false }
 }
 EOF
-  nohup "$SERVER_BIN" -config /tmp/server_nobots.json > "$LOGS_DIR/server.log" 2>&1 &
+  nohup "$SERVER_BIN" -config /tmp/server_nobots.json 2>&1 | tee "$LOGS_DIR/server.log" &
   SERVER_PIDS+=($!)
   echo "Server PID: ${SERVER_PIDS[-1]} (no bots — clients play)"
 fi
@@ -102,7 +102,7 @@ if [ "$RUN_GO" = true ]; then
   echo "=== Starting $NUM_GO Go clients ==="
   cd "$CLIENTS_DIR/golang"
   for i in $(seq 1 $NUM_GO); do
-    nohup ./bin/client --name "GoClient$i" --config config.json > "$LOGS_DIR/go_client_$i.log" 2>&1 &
+    nohup ./bin/client --name "GoClient$i" --config config.json 2>&1 | tee "$LOGS_DIR/go_client_$i.log" &
     GO_PIDS+=($!)
     disown $!
     echo "  GoClient$i PID: ${GO_PIDS[-1]}"
@@ -115,7 +115,7 @@ if [ "$RUN_PYTHON" = true ]; then
   cd "$CLIENTS_DIR/python"
   if [ -n "$UV_BIN" ]; then
     for i in $(seq 1 $NUM_PYTHON); do
-      PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json > "$LOGS_DIR/python_client_$i.log" 2>&1 &
+      PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json 2>&1 | tee "$LOGS_DIR/python_client_$i.log" &
       PYTHON_PIDS+=($!)
       disown $!
       echo "  PythonClient$i PID: ${PYTHON_PIDS[-1]}"
@@ -136,7 +136,7 @@ if [ "$RUN_CSHARP" = true ]; then
         --config config.json \
         --name "CSharpClient$i" \
         --strategy simple \
-        > "$LOGS_DIR/csharp_client_$i.log" 2>&1 &
+        2>&1 | tee "$LOGS_DIR/csharp_client_$i.log" &
       CSHARP_PIDS+=($!)
       disown $!
       echo "  CSharpClient$i PID: ${CSHARP_PIDS[-1]}"
