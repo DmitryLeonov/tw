@@ -39,6 +39,9 @@ RUN_PYTHON=true
 RUN_CSHARP=true
 RUN_FORCE_START=false
 
+# Ensure logs directory exists
+mkdir -p "$SCRIPT_DIR/logs"
+
 # Arrays for PIDs
 declare -a SERVER_PIDS=()
 declare -a GO_PIDS=()
