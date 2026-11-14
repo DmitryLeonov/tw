@@ -77,21 +77,21 @@ dotnet run -- --strategy Simple
 # Go-клиенты
 cd /apps/tw/twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./client --name "GoClient$i" > logs/go_client_$i.log 2>&1 &
+  nohup ./client --name "GoClient$i" &
 done
 
 # Python-клиенты
 cd /apps/tw/twclients/python
 export PATH="/root/.local/bin:$PATH"
 for i in 1 2 3 4 5; do
-  nohup uv run python main.py --name "PythonClient$i" > logs/python_client_$i.log 2>&1 &
+  nohup uv run python main.py --name "PythonClient$i" &
 done
 
 # C#-клиенты
 cd /apps/tw/twclients/csharp
 export PATH="/opt/dotnet:$PATH"
 for i in 1 2 3 4 5; do
-  nohup dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > logs/csharp_client_$i.log 2>&1 &
+  nohup dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
 done
 ```
 

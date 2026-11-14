@@ -159,19 +159,19 @@ Or with command-line arguments:
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./bin/client --name "GoClient$i" > logs/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" &
 done
 
 # Python
 cd twclients/python
 for i in 1 2 3 4 5; do
-  uv run python main.py --name "PythonClient$i" > logs/python_client_$i.log 2>&1 &
+  uv run python main.py --name "PythonClient$i" &
 done
 
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > logs/csharp_client_$i.log 2>&1 &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
 done
 ```
 

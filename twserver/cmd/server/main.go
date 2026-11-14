@@ -2,11 +2,13 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,11 +16,41 @@ import (
 	"twserver/internal/server"
 )
 
+// multiWriter writes to both stdout and a log file.
+type multiWriter struct {
+	mu   sync.Mutex
+	out  io.Writer
+	file io.Writer
+}
+
+func (w *multiWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file != nil {
+		if _, ferr := w.file.Write(p); ferr != nil {
+			return 0, ferr
+		}
+	}
+	return w.out.Write(p)
+}
+
 func main() {
-	// Command-line flag for config file path.
+	// Command-line flags.
 	configPath := flag.String("config", "", "Path to JSON config file (optional)")
+	logFile := flag.String("log-file", "", "Path to log file (duplicates stdout)")
 	flag.Parse()
 	flag.CommandLine.Usage = func() {} // Suppress default usage
+
+	// Set up multi-writer for stdout + log file.
+	mw := &multiWriter{out: os.Stdout}
+	if *logFile != "" {
+		f, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			log.Fatalf("Failed to open log file: %v", err)
+		}
+		mw.file = f
+	}
+	log.SetOutput(mw)
 
 	port := env("PORT", "8080")
 	players := intEnv("MAX_PLAYERS", 20)

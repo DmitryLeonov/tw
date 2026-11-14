@@ -178,19 +178,19 @@ Action format:
 # Go
 cd twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./bin/client --name "GoClient$i" > logs/go_client_$i.log 2>&1 &
+  nohup ./bin/client --name "GoClient$i" &
 done
 
 # Python
 cd twclients/python
 for i in 1 2 3 4 5; do
-  uv run python main.py --name "PythonClient$i" > logs/python_client_$i.log 2>&1 &
+  uv run python main.py --name "PythonClient$i" &
 done
 
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > logs/csharp_client_$i.log 2>&1 &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
 done
 ```
 
@@ -273,10 +273,13 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 
 ## Logs
 
-- Server: `logs/server.log`
-- Go clients: `logs/go_client_{1-5}.log`
-- Python clients: `logs/python_client_{1-5}.log`
-- C# clients: `logs/csharp_client_{1-5}.log`
+- Server: `logs/server.log` (via `-log-file` flag)
+- Clients: stdout (no file output)
+
+To enable server logging:
+```bash
+./twserver/bin/server -config config.json -log-file logs/server.log
+```
 
 ## Compatibility
 
