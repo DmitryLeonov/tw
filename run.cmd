@@ -83,27 +83,13 @@ if "%RUN_PYTHON%"=="true" (
     )
 )
 
-REM Build C# clients
-if "%RUN_CSHARP%"=="true" (
-    echo === Building C# clients ===
-    cd /d "%CLIENTS_DIR%\csharp"
-    dotnet publish --configuration Release >nul 2>&1
-    if errorlevel 1 (
-        echo C# build failed, skipping C# clients
-        set RUN_CSHARP=false
-    ) else (
-        echo C# clients built successfully
-    )
-    cd /d "%SCRIPT_DIR%"
-)
-
 REM Start C# clients (delayed because dotnet takes time to load)
 if "%RUN_CSHARP%"=="true" (
     echo === Starting %NUM_CSHARP% C# clients [delayed 15s] ===
     timeout /t 15 /nobreak >nul
     cd /d "%CLIENTS_DIR%\csharp"
     for /l %%i in (1,1,%NUM_CSHARP%) do (
-        start "CSharpClient%%i" cmd /c "dotnet bin\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple > %TEMP%\csharp_client_%%i.log 2>&1"
+        start "CSharpClient%%i" cmd /c "dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --config config.json --name CSharpClient%%i --strategy simple > %TEMP%\csharp_client_%%i.log 2>&1"
         echo   CSharpClient%%i started
     )
 )

@@ -127,12 +127,12 @@ fi
 
 # Start C# clients (5 copies) — delayed because dotnet takes time to load
 if [ "$RUN_CSHARP" = true ]; then
-  if [ -f "$CLIENTS_DIR/csharp/bin/publish/TerritoryWars.Client.dll" ]; then
+  if [ -f "$CLIENTS_DIR/csharp/bin/Release/net10.0/publish/TerritoryWars.Client.dll" ]; then
     echo "=== Starting $NUM_CSHARP C# clients (delayed 5s) ==="
     sleep 15
     cd "$CLIENTS_DIR/csharp"
     for i in $(seq 1 $NUM_CSHARP); do
-      nohup /opt/dotnet/dotnet bin/publish/TerritoryWars.Client.dll \
+      nohup /opt/dotnet/dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll \
         --config config.json \
         --name "CSharpClient$i" \
         --strategy simple \
