@@ -70,7 +70,7 @@ cd /apps/tw/twclients/golang
 go mod tidy
 
 # Build the client
-go build -o client ./cmd/client/
+go build -o bin/client ./cmd/client/
 
 # Run it
 ./client

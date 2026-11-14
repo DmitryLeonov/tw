@@ -1,5 +1,5 @@
 @echo off
 cd /d "%~dp0"
 echo === Building Territory Wars C# client ===
-dotnet build --configuration Release
-echo Done
+dotnet publish --configuration Release
+echo Done: bin\publish\TerritoryWars.Client.dll

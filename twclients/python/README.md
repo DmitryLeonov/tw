@@ -107,6 +107,8 @@ The `config.json` file already contains an example configuration:
 Available strategies:
 - **`simple`** — Expands first, then attacks, then fortifies weakest cell (health ≤3), then passes
 
+Note: Only the `simple` strategy is currently implemented across all clients.
+
 ## How to Write Custom Strategies
 
 Subclass `IGameStrategy` and implement the `decide` method:

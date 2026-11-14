@@ -50,8 +50,10 @@ This client connects to a Territory Wars game server, receives game state observ
 ```bash
 cd /apps/tw/twclients/csharp
 dotnet restore
-dotnet build
+dotnet publish --configuration Release
 ```
+
+Output: `bin/publish/TerritoryWars.Client.dll`
 
 ### Run
 
@@ -89,7 +91,7 @@ done
 cd /apps/tw/twclients/csharp
 export PATH="/opt/dotnet:$PATH"
 for i in 1 2 3 4 5; do
-  nohup dotnet run --project . -- --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
+  nohup dotnet bin/publish/TerritoryWars.Client.dll --name "CSharpClient$i" > /tmp/csharp_client_$i.log 2>&1 &
 done
 ```
 
@@ -210,7 +212,7 @@ IGameStrategy strategy = strategyName.ToLower() switch
 {
     "simple" => new SimpleStrategy(),
     "my_strategy" => new MyStrategy(),
-    _ => throw new ArgumentException(...)
+    _ => new SimpleStrategy() // fallback to simple
 };
 ```
 

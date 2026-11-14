@@ -129,7 +129,7 @@ dotnet run -- --config config.json
 ```bash
 cd twclients/golang
 go mod tidy
-go build -o client ./cmd/client/
+go build -o bin/client ./cmd/client/
 ./client --name MyBot --config config.json
 ```
 
@@ -275,7 +275,7 @@ func createStrategy(strategyName string, logger *slog.Logger) strategy.Strategy 
 
 - Size: 40 × 40
 - **Toroidal** — coordinates wrap-around: `(x + 1) % Width`, `(y + 1) % Height`
-- 20 spawn positions
+- 30 spawn positions
 - Cell types: `base` (base), `normal` (normal), `resource` (resource)
 
 ### Rules

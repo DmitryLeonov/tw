@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0"
 echo === Building Territory Wars Go client ===
-go build -o client.exe .\cmd\client
-echo Done: client.exe
+mkdir bin 2>nul
+go build -o bin\client.exe .\cmd\client
+echo Done: bin\client.exe

@@ -70,7 +70,7 @@ cd /apps/tw/twclients/golang
 go mod tidy
 
 # Соберите клиент
-go build -o client ./cmd/client/
+go build -o bin/client ./cmd/client/
 
 # Запустите его
 ./client

@@ -105,7 +105,8 @@ uv run python main.py --config config.json --log-level DEBUG
 
 Доступные стратегии:
 - **`simple`** — сначала expand, затем attack, затем fortify, затем pass
-- **`aggressive`** — сначала attack, затем expand, затем fortify, затем pass
+
+Примечание: Только стратегия `simple` реализована во всех клиентах.
 
 ## Как написать собственную стратегию
 
@@ -249,7 +250,7 @@ Timeout waiting for event
 Unknown strategy: foo
 ```
 
-**Решение:** Используйте `simple` или `aggressive`, или добавьте свою стратегию в `build_strategy()`.
+**Решение:** Используйте `simple`, или добавьте свою стратегию в `build_strategy()`.
 
 ## Структура файлов
 
