@@ -62,6 +62,9 @@ func main() {
 		// Set up multi-writer for stdout + log file from config.
 		mw = &multiWriter{out: os.Stdout}
 		if cfg.LogsDir != "" {
+			if err := os.MkdirAll(cfg.LogsDir, 0755); err != nil {
+				log.Fatalf("Failed to create logs dir %s: %v", cfg.LogsDir, err)
+			}
 			logPath := filepath.Join(cfg.LogsDir, "server.log")
 			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 			if err != nil {
@@ -69,6 +72,11 @@ func main() {
 			}
 			mw.file = f
 			log.Printf("Logging to %s", logPath)
+		}
+		if cfg.ResultsDir != "" {
+			if err := os.MkdirAll(cfg.ResultsDir, 0755); err != nil {
+				log.Fatalf("Failed to create results dir %s: %v", cfg.ResultsDir, err)
+			}
 		}
 		log.SetOutput(mw)
 
