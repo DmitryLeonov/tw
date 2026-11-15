@@ -78,7 +78,7 @@ REM Start Python clients
 if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "PythonClient%%i" cmd.exe /c "cd /d %CLIENTS_DIR%\python && uv run python main.py --name PythonClient%%i --config %CLIENTS_DIR%\python\config.json --log-file %LOGS_DIR%\python_client_%%i.log && pause"
+        start "PythonClient%%i" /I cmd.exe /c "cd /d %CLIENTS_DIR%\python && uv run python main.py --name PythonClient%%i --config %CLIENTS_DIR%\python\config.json --log-file %LOGS_DIR%\python_client_%%i.log"
         echo   PythonClient%%i started
     )
 )
@@ -88,7 +88,7 @@ if "%RUN_CSHARP%"=="true" (
     echo === Starting %NUM_CSHARP% C# clients [delayed 15s] ===
     timeout /t 15 /nobreak >nul
     for /l %%i in (1,1,%NUM_CSHARP%) do (
-        start "CSharpClient%%i" cmd.exe /c "cd /d %CLIENTS_DIR%\csharp && dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --name CSharpClient%%i --config %CLIENTS_DIR%\csharp\config.json --strategy simple --log-file %LOGS_DIR%\csharp_client_%%i.log && pause"
+        start "CSharpClient%%i" /I cmd.exe /c "cd /d %CLIENTS_DIR%\csharp && dotnet exec bin\Release\net10.0\publish\TerritoryWars.Client.dll --name CSharpClient%%i --config %CLIENTS_DIR%\csharp\config.json --strategy simple --log-file %LOGS_DIR%\csharp_client_%%i.log"
         echo   CSharpClient%%i started
     )
 )
