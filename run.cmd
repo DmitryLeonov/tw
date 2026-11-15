@@ -78,7 +78,7 @@ REM Start Python clients
 if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "PythonClient%%i" /I cmd.exe /c "cd /d %CLIENTS_DIR%\python && uv run python main.py --name PythonClient%%i --config %CLIENTS_DIR%\python\config.json --log-file %LOGS_DIR%\python_client_%%i.log"
+        start "PythonClient%%i" "%CLIENTS_DIR%\python\run.cmd" --name PythonClient%%i --config "%CLIENTS_DIR%\python\config.json" --log-file "%LOGS_DIR%\python_client_%%i.log"
         echo   PythonClient%%i started
     )
 )
