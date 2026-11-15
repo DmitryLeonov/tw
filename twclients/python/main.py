@@ -169,6 +169,9 @@ def main() -> int:
     args = parse_args()
     config = build_config(args)
 
+    server_url = config["server"]
+    player_name = config["player_name"]
+
     log_file = ""
     logs_dir = config.get("logs_dir", "")
     if logs_dir:
@@ -177,9 +180,6 @@ def main() -> int:
     setup_logging(config.get("log_level", "INFO"), log_file)
     logger.info("Territory Wars Python Client v1.0.0")
     logger.info("Config: %s", config)
-
-    server_url = config["server"]
-    player_name = config["player_name"]
     http_timeout = config.get("http_timeout", 10)
     strategy_name = config.get("strategy", "simple")
     max_retries = config.get("max_retries", 10)
