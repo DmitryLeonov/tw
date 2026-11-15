@@ -57,9 +57,6 @@ var timeoutSeconds = int.Parse(
     configuration["HttpTimeoutSeconds"]
     ?? "10");
 
-var logLevel = configuration["LogLevel"]
-               ?? "Information";
-
 var maxRetries = int.Parse(
     configuration["MaxRetries"]
     ?? "10");
@@ -75,7 +72,6 @@ Logger.WriteLine($"[CONFIG] Server: {baseUrl}");
 Logger.WriteLine($"[CONFIG] Player: {name}");
 Logger.WriteLine($"[CONFIG] Strategy: {strategyName}");
 Logger.WriteLine($"[CONFIG] Timeout: {timeoutSeconds}s");
-Logger.WriteLine($"[CONFIG] Log Level: {logLevel}");
 Logger.WriteLine($"[CONFIG] Max Retries: {maxRetries}");
 
 // Create cancellation token for Ctrl+C handling

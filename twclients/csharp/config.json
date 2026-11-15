@@ -2,7 +2,6 @@
   "ServerUrl": "http://localhost:8080",
   "PlayerName": "StudentBot",
   "HttpTimeoutSeconds": 10,
-  "LogLevel": "Information",
   "Strategy": "Simple",
   "MaxRetries": 10,
   "LogsDir": "logs"
