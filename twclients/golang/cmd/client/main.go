@@ -64,7 +64,11 @@ func main() {
 	}
 
 	// Set up logger.
-	logger := setupLogger(cfg.LogLevel, cfg.LogFile)
+	logFile := ""
+	if cfg.LogsDir != "" {
+		logFile = filepath.Join(cfg.LogsDir, cfg.PlayerName+".log")
+	}
+	logger := setupLogger(cfg.LogLevel, logFile)
 
 	logger.Info("starting Territory Wars client",
 		"server", cfg.Server,

@@ -82,7 +82,7 @@ def build_config(args: argparse.Namespace) -> Dict[str, Any]:
         "player_name": "StudentBot",
         "http_timeout": 10,
         "log_level": "INFO",
-        "log_file": "",
+        "logs_dir": "",
         "strategy": "simple",
         "max_retries": 10,
     }
@@ -169,7 +169,12 @@ def main() -> int:
     args = parse_args()
     config = build_config(args)
 
-    setup_logging(config.get("log_level", "INFO"), config.get("log_file", ""))
+    log_file = ""
+    logs_dir = config.get("logs_dir", "")
+    if logs_dir:
+        log_file = str(Path(logs_dir) / f"{player_name}.log")
+
+    setup_logging(config.get("log_level", "INFO"), log_file)
     logger.info("Territory Wars Python Client v1.0.0")
     logger.info("Config: %s", config)
 

@@ -4,5 +4,6 @@
   "http_timeout": 10,
   "log_level": "INFO",
   "strategy": "simple",
-  "max_retries": 10
+  "max_retries": 10,
+  "logs_dir": "logs"
 }

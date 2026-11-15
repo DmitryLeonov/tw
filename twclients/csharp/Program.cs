@@ -14,7 +14,6 @@ var configPath = "config.json";
 string? serverUrl = null;
 string? playerName = null;
 string strategyName = "Simple";
-string? logFile = null;
 
 for (var i = 0; i < commandArgs.Length; i++)
 {
@@ -34,10 +33,6 @@ for (var i = 0; i < commandArgs.Length; i++)
             break;
         case "--strategy":
             if (i + 2 <= commandArgs.Length) strategyName = commandArgs[i + 1];
-            i++;
-            break;
-        case "--log-file":
-            if (i + 2 <= commandArgs.Length) logFile = commandArgs[i + 1];
             i++;
             break;
     }
@@ -69,8 +64,9 @@ var maxRetries = int.Parse(
     configuration["MaxRetries"]
     ?? "10");
 
-var logFilePath = configuration["LogFile"]
-                  ?? logFile;
+var logFilePath = configuration["LogsDir"] != null
+                   ? Path.Combine(configuration["LogsDir"], $"{name}.log")
+                   : (string?)null;
 
 // Initialize dual writer for Console + log file
 Logger.Init(logFilePath);

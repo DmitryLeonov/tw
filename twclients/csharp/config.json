@@ -4,5 +4,6 @@
   "HttpTimeoutSeconds": 10,
   "LogLevel": "Information",
   "Strategy": "Simple",
-  "MaxRetries": 10
+  "MaxRetries": 10,
+  "LogsDir": "logs"
 }
