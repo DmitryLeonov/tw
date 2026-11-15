@@ -69,7 +69,7 @@ REM Start Go clients
 if "%RUN_GO%"=="true" (
     echo === Starting %NUM_GO% Go clients ===
     for /l %%i in (1,1,%NUM_GO%) do (
-        start "GoClient%%i" "%CLIENTS_DIR%\golang\bin\client.exe" --name GoClient%%i --config "%CLIENTS_DIR%\golang\config.json" --log-file "%LOGS_DIR%\go_client_%%i.log"
+        start "GoClient%%i" /I cmd.exe /c "%CLIENTS_DIR%\golang\bin\client.exe --name GoClient%%i --config %CLIENTS_DIR%\golang\config.json --log-file %LOGS_DIR%\go_client_%%i.log"
         echo   GoClient%%i started
     )
 )
@@ -78,7 +78,7 @@ REM Start Python clients
 if "%RUN_PYTHON%"=="true" (
     echo === Starting %NUM_PYTHON% Python clients ===
     for /l %%i in (1,1,%NUM_PYTHON%) do (
-        start "PythonClient%%i" /I cmd.exe /c "cd /d %CLIENTS_DIR%\python && uv run python main.py --name PythonClient%%i --config %CLIENTS_DIR%\python\config.json --log-file %LOGS_DIR%\python_client_%%i.log"
+        start "PythonClient%%i" /I cmd.exe /c "cd /d %CLIENTS_DIR%\python && python main.py --name PythonClient%%i --config %CLIENTS_DIR%\python\config.json --log-file %LOGS_DIR%\python_client_%%i.log"
         echo   PythonClient%%i started
     )
 )
