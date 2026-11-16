@@ -18,9 +18,19 @@ NUM_PYTHON=5
 NUM_CSHARP=5
 NUM_BOTS=10
 
-# Add dotnet to PATH if installed
-if [ -d /opt/dotnet ]; then
-  export PATH="/opt/dotnet:$PATH"
+# Find dotnet executable (Linux / macOS compatible)
+DOTNET_BIN=""
+if command -v dotnet > /dev/null 2>&1; then
+  DOTNET_BIN="$(command -v dotnet)"
+elif [ -f /opt/dotnet/dotnet ]; then
+  DOTNET_BIN="/opt/dotnet/dotnet"
+elif [ -f /usr/local/share/dotnet/dotnet ]; then
+  DOTNET_BIN="/usr/local/share/dotnet/dotnet"
+elif [ -f "$HOME/.dotnet/dotnet" ]; then
+  DOTNET_BIN="$HOME/.dotnet/dotnet"
+fi
+if [ -n "$DOTNET_BIN" ]; then
+  export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 fi
 
 # Add uv to PATH if installed
@@ -47,6 +57,10 @@ declare -a SERVER_PIDS=()
 declare -a GO_PIDS=()
 declare -a PYTHON_PIDS=()
 declare -a CSHARP_PIDS=()
+SERVER_IDX=0
+GO_IDX=0
+PYTHON_IDX=0
+CSHARP_IDX=0
 
 # Parse flags
 for arg in "$@"; do
@@ -65,9 +79,10 @@ echo "=== Starting server ==="
 cd "$SERVER_DIR"
 if [ "$RUN_BOTS" = true ]; then
   nohup "$SERVER_BIN" -config config.json &
-  SERVER_PIDS+=($!)
+  SERVER_PIDS[$SERVER_IDX]=$!
   disown $!
-  echo "Server PID: ${SERVER_PIDS[-1]} (bots enabled)"
+  echo "Server PID: ${SERVER_PIDS[$SERVER_IDX]} (bots enabled)"
+  SERVER_IDX=$((SERVER_IDX + 1))
 else
   # No bots: start server without bots so external clients can join first
   cat > /tmp/server_nobots.json <<EOF
@@ -82,8 +97,10 @@ else
 }
 EOF
   nohup "$SERVER_BIN" -config /tmp/server_nobots.json &
-  SERVER_PIDS+=($!)
-  echo "Server PID: ${SERVER_PIDS[-1]} (no bots — clients play)"
+  SERVER_PIDS[$SERVER_IDX]=$!
+  disown $!
+  echo "Server PID: ${SERVER_PIDS[$SERVER_IDX]} (no bots — clients play)"
+  SERVER_IDX=$((SERVER_IDX + 1))
 fi
 
 # Wait for server to be ready
@@ -102,9 +119,10 @@ if [ "$RUN_GO" = true ]; then
   cd "$CLIENTS_DIR/golang"
   for i in $(seq 1 $NUM_GO); do
     nohup ./bin/client --name "GoClient$i" --config config.json &
-    GO_PIDS+=($!)
+    GO_PIDS[$GO_IDX]=$!
     disown $!
-    echo "  GoClient$i PID: ${GO_PIDS[-1]}"
+    echo "  GoClient$i PID: ${GO_PIDS[$GO_IDX]}"
+    GO_IDX=$((GO_IDX + 1))
   done
 fi
 
@@ -115,9 +133,10 @@ if [ "$RUN_PYTHON" = true ]; then
   if [ -n "$UV_BIN" ]; then
     for i in $(seq 1 $NUM_PYTHON); do
       PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json &
-      PYTHON_PIDS+=($!)
+      PYTHON_PIDS[$PYTHON_IDX]=$!
       disown $!
-      echo "  PythonClient$i PID: ${PYTHON_PIDS[-1]}"
+      echo "  PythonClient$i PID: ${PYTHON_PIDS[$PYTHON_IDX]}"
+      PYTHON_IDX=$((PYTHON_IDX + 1))
     done
   else
     echo "=== Skipping Python clients (uv not found) ==="
@@ -131,14 +150,15 @@ if [ "$RUN_CSHARP" = true ]; then
     sleep 15
     cd "$CLIENTS_DIR/csharp"
     for i in $(seq 1 $NUM_CSHARP); do
-      nohup /opt/dotnet/dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll \
+      nohup "$DOTNET_BIN" exec bin/Release/net10.0/publish/TerritoryWars.Client.dll \
         --config config.json \
         --name "CSharpClient$i" \
         --strategy simple \
         &
-      CSHARP_PIDS+=($!)
+      CSHARP_PIDS[$CSHARP_IDX]=$!
       disown $!
-      echo "  CSharpClient$i PID: ${CSHARP_PIDS[-1]}"
+      echo "  CSharpClient$i PID: ${CSHARP_PIDS[$CSHARP_IDX]}"
+      CSHARP_IDX=$((CSHARP_IDX + 1))
     done
   else
     echo "=== Skipping C# clients (binary not found) ==="
