@@ -151,7 +151,8 @@ type PlayerAgent interface {
 - RandomBot;
 - AggressiveBot;
 - DefensiveBot;
-- ExpansionBot.
+- ExpansionBot;
+- SimpleBot.
 
 Стратегии должны быть независимы от механизма регистрации игроков и разрешения ходов.
 
