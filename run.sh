@@ -168,7 +168,62 @@ echo "Viewer: http://localhost:8080/viewer"
 echo "Logs:   logs/{server,go_client_*,python_client_*,csharp_client_*}.log"
 echo "Press Ctrl+C to stop all"
 
-# Keep script alive without blocking on child exit
+# Interactive console — sends commands to the server via REST API.
+# Mirrors the built-in console commands: start, stop, pause, resume.
+SERVER_URL="http://localhost:8080"
+
 while true; do
-  sleep 1
+  echo ""
+  echo "=== Server Console ==="
+  echo "  1) start  — start the game"
+  echo "  2) stop   — stop the game"
+  echo "  3) pause  — pause the game"
+  echo "  4) resume — resume the game"
+  echo "  5) state  — show game state"
+  echo "  6) leaderboard — show leaderboard"
+  echo "  q) quit   — stop all processes"
+  echo ""
+  read -r -p "Command [1-6/q]: " cmd
+
+  case "$cmd" in
+    1)
+      echo -n "Starting game... "
+      curl -s -X POST "$SERVER_URL/api/v1/start" && echo " OK" || echo " FAIL"
+      ;;
+    2)
+      echo -n "Stopping game... "
+      curl -s -X POST "$SERVER_URL/api/v1/stop" && echo " OK" || echo " FAIL"
+      ;;
+    3)
+      echo -n "Pausing game... "
+      curl -s -X POST "$SERVER_URL/api/v1/pause" && echo " OK" || echo " FAIL"
+      ;;
+    4)
+      echo -n "Resuming game... "
+      curl -s -X POST "$SERVER_URL/api/v1/resume" && echo " OK" || echo " FAIL"
+      ;;
+    5)
+      curl -s "$SERVER_URL/api/v1/state" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/state"
+      ;;
+    6)
+      curl -s "$SERVER_URL/api/v1/leaderboard" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/leaderboard"
+      ;;
+    q|quit|Q|QUIT)
+      echo "Stopping all processes..."
+      # Stop server
+      curl -s -X POST "$SERVER_URL/api/v1/stop" > /dev/null 2>&1
+      # Kill all client PIDs
+      for pid in "${GO_PIDS[@]}" "${PYTHON_PIDS[@]}" "${CSHARP_PIDS[@]}"; do
+        kill "$pid" 2>/dev/null
+      done
+      for pid in "${SERVER_PIDS[@]}"; do
+        kill "$pid" 2>/dev/null
+      done
+      echo "All processes stopped."
+      exit 0
+      ;;
+    *)
+      echo "Unknown command: $cmd"
+      ;;
+  esac
 done
