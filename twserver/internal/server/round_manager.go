@@ -512,7 +512,7 @@ func (rm *RoundManager) printResults() {
 		}
 		mark := p.Territory
 		if rm.engine.Config().MarkRate > 0 {
-			mark = p.Territory / rm.engine.Config().MarkRate
+			mark = (p.Territory + rm.engine.Config().MarkRate/2) / rm.engine.Config().MarkRate
 		}
 		if mark > rm.engine.Config().MarkThreshold {
 			mark = rm.engine.Config().MarkThreshold
