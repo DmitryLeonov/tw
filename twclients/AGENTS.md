@@ -69,118 +69,13 @@ twclients/csharp/
 └── README.md / README.rus.md
 ```
 
-## 2. HTTP-протокол
+## 2. Игровой цикл (Game Loop)
 
-### 2.1 Регистрация (Join)
+### 2.1 Go-клиент: HTTP polling + WebSocket submit
 
-```
-POST /api/v1/join
-Content-Type: application/json
-Body: {"name": "PlayerName"}
+Go-клиент использует **HTTP-опрос** для получения состояния и **WebSocket** только для отправки действий.
 
-Response (201):
-{
-  "player_id": "p01",
-  "token": "abc123...",
-  "websocket_url": "/ws"
-}
-```
-
-**Правило:** Токен — 48-символьный hex. Используется для всех последующих запросов.
-
-### 2.2 Наблюдение (State)
-
-```
-GET /api/v1/state
-Authorization: Bearer TOKEN
-
-Response (200): Observation (см. раздел 3.1)
-```
-
-**Правило:** HTTP-опрос используется Go-клиентом для получения состояния. Python-клиент получает OBSERVATION через WebSocket. C#-клиент опрашивает через HTTP.
-
-### 2.3 Таблица лидеров (Leaderboard)
-
-```
-GET /api/v1/leaderboard
-
-Response (200):
-{
-  "status": {...},
-  "leaderboard": [
-    {"player_id": "p01", "score": 100},
-    ...
-  ]
-}
-```
-
-### 2.4 WebSocket
-
-```
-ws://localhost:8080/ws?token=YOUR_TOKEN
-```
-
-Токен передаётся через query parameter.
-
-**Правило:** Все три клиента используют один и тот же WebSocket-протокол.
-
-## 3. Модели данных
-
-### 3.1 Observation
-
-```json
-{
-  "match_id": "string",
-  "player_id": "string",
-  "turn": 0,
-  "game_over": false,
-  "width": 40,
-  "height": 40,
-  "energy": 5,
-  "score": 0,
-  "cells": [{"x": 0, "y": 0, "owner": "p01", "health": 5, "type": "base"}],
-  "players": [{"player_id": "p01", "x": 0, "y": 0, "score": 0, "connected": true, "eliminated": false}],
-  "available_actions": ["expand", "attack", "fortify", "pass"]
-}
-```
-
-**Правило:** Все три клиента используют одинаковые JSON-поля. Go и C# используют snake_case в JSON (через теги), Python — snake_case в dataclass-полях.
-
-### 3.2 Action
-
-```json
-{"type": "expand", "target": {"x": 20, "y": 4}}
-```
-
-Допустимые типы: `expand` (1 energy), `attack` (2 energy), `fortify` (2 energy), `pass` (0).
-
-### 3.3 ActionMessage (WebSocket envelope)
-
-```json
-{"type": "ACTION", "turn": 5, "actions": [{"type": "expand", "target": {"x": 20, "y": 4}}]}
-```
-
-### 3.4 Event (WebSocket event)
-
-```json
-{"type": "OBSERVATION", "turn": 5, "observation": {...}}
-{"type": "ACTION_ACCEPTED", "turn": 5}
-{"type": "TURN_RESOLVED", "turn": 5, "results": [...]}
-{"type": "GAME_OVER", "turn": 200, "message": "Game over"}
-{"type": "ERROR", "turn": 5, "message": "Error description"}
-```
-
-### 3.5 JoinResponse
-
-```json
-{"player_id": "p01", "token": "abc...", "websocket_url": "/ws"}
-```
-
-## 4. Игровой цикл (Game Loop)
-
-### 4.1 Go-клиент: HTTP polling + WebSocket submit
-
-Go-клиент использует **HTTP-опрос** для получения состояния и **WebSocket** только для отправки действий:
+**Правило:** Go-клиент не читает события из WebSocket (только отправляет действия). Состояние всегда берётся через HTTP.
 
 1. `Join` → регистрация, получение токена.
 2. `GetObservation` (HTTP) → начальное состояние.
@@ -192,11 +87,11 @@ Go-клиент использует **HTTP-опрос** для получени
    - HTTP polling (500ms) до изменения `turn`.
 5. Reconnect: при потере WS → `GetObservation` → проверка `game_over` → `Join` (re-join) → `ConnectWebSocket`.
 
-**Особенность:** Go-клиент не читает события из WebSocket (только отправляет действия). Состояние всегда берётся через HTTP.
+### 2.2 Python-клиент: WebSocket events
 
-### 4.2 Python-клиент: WebSocket events
+Python-клиент использует **WebSocket events** для получения состояния.
 
-Python-клиент использует **WebSocket events** для получения состояния:
+**Правило:** Python-клиент читает все события из WS (ACTION_ACCEPTED, TURN_RESOLVED, OBSERVATION, GAME_OVER, ERROR, STILL_ALIVE, CONNECTED).
 
 1. `GameApiClient.register()` → регистрация.
 2. `api_client.connect()` → подключение к WS.
@@ -207,11 +102,11 @@ Python-клиент использует **WebSocket events** для получ�
    - `_wait_for_observation()` → ожидание TURN_RESOLVED + OBSERVATION.
 5. Reconnect: при потере WS → `api_client.connect()` → `_wait_for_observation()`.
 
-**Особенность:** Python-клиент читает все события из WS (ACTION_ACCEPTED, TURN_RESOLVED, OBSERVATION, GAME_OVER, ERROR, STILL_ALIVE, CONNECTED).
+### 2.3 C#-клиент: HTTP polling + WebSocket submit + response queue
 
-### 4.3 C#-клиент: HTTP polling + WebSocket submit + response queue
+C#-клиент использует **HTTP-опрос** для состояния, **WebSocket** для отправки действий и **очередь сообщений** для ответа сервера.
 
-C#-клиент использует **HTTP-опрос** для состояния, **WebSocket** для отправки действий и **очередь сообщений** для ответа сервера:
+**Правило:** C#-клиент имеет background read loop, который буферизует все WS-сообщения в `ConcurrentQueue`. `WaitForActionResponseAsync` читает из очереди, ожидая ACTION_ACCEPTED или ERROR.
 
 1. `JoinAsync` → регистрация.
 2. `ConnectWebSocketAsync` → подключение к WS + запуск background read loop.
@@ -224,11 +119,9 @@ C#-клиент использует **HTTP-опрос** для состояни
    - HTTP polling (500ms) до изменения `turn`.
 5. Reconnect: при потере WS → `ConnectWebSocketAsync` → `JoinAsync` (re-join) → `ConnectWebSocketAsync`.
 
-**Особенность:** C#-клиент имеет background read loop, который буферизует все WS-сообщения в `ConcurrentQueue`. `WaitForActionResponseAsync` читает из очереди, ожидая ACTION_ACCEPTED или ERROR.
+## 3. Интерфейсы стратегий
 
-## 5. Интерфейсы стратегий
-
-### 5.1 Go
+### 3.1 Go
 
 ```go
 type Strategy interface {
@@ -240,7 +133,7 @@ type Strategy interface {
 
 **Правило:** `Decide` возвращает `*models.Action` или `nil` (pass).
 
-### 5.2 Python
+### 3.2 Python
 
 ```python
 class IGameStrategy(ABC):
@@ -253,7 +146,7 @@ class IGameStrategy(ABC):
 
 **Правило:** `decide` возвращает `Action` (type + optional target).
 
-### 5.3 C#
+### 3.3 C#
 
 ```csharp
 public interface IGameStrategy
@@ -266,9 +159,9 @@ public interface IGameStrategy
 
 **Правило:** `Decide` возвращает `Action` или `pass`.
 
-## 6. Конфигурация
+## 4. Конфигурация
 
-### 6.1 Go-клиент
+### 4.1 Go-клиент
 
 ```json
 {
@@ -284,7 +177,7 @@ public interface IGameStrategy
 
 CLI-флаги: `--server`, `--name`, `--config`, `--log-level`.
 
-### 6.2 Python-клиент
+### 4.2 Python-клиент
 
 ```json
 {
@@ -300,7 +193,7 @@ CLI-флаги: `--server`, `--name`, `--config`, `--log-level`.
 
 CLI-аргументы: `--server`, `--name`, `--config`, `--log-level`.
 
-### 6.3 C#-клиент
+### 4.3 C#-клиент
 
 ```json
 {
@@ -317,25 +210,25 @@ CLI-аргументы: `--config`, `--server`, `--name`, `--strategy`.
 
 Env-переменные: `TERRITORYWARS_*` (префикс).
 
-### 6.4 Приоритет конфигурации
+### 4.4 Приоритет конфигурации
 
 **Правило:** CLI-флаги > config.json > значения по умолчанию.
 
-## 7. Логирование
+## 5. Логирование
 
-### 7.1 Go-клиент
+### 5.1 Go-клиент
 
 `multiWriter` — дублирует `slog` вывод в stdout и log file.
 
 Log file: `logs_dir/player_name.log`.
 
-### 7.2 Python-клиент
+### 5.2 Python-клиент
 
 `logging` module — file handler + basicConfig.
 
 Log file: `logs_dir/player_name.log`.
 
-### 7.3 C#-клиент
+### 5.3 C#-клиент
 
 `Logger` (static class) — `StreamWriter` + `Console.WriteLine`.
 
@@ -343,16 +236,16 @@ Log file: `logs_dir/player_name.log`.
 
 **Правило:** Все три клиента дублируют вывод в stdout и log file.
 
-## 8. Обработка ошибок и переподключение
+## 6. Обработка ошибок и переподключение
 
-### 8.1 Общие принципы
+### 6.1 Общие принципы
 
 1. Все три клиента поддерживают переподключение при потере WS-соединения.
 2. При потере WS → проверка `game_over` через HTTP → re-join (новый токен) → reconnect.
 3. `max_retries` (по умолчанию 10) — максимальное количество переподключений.
 4. После re-join клиент продолжает игру с новым токеном.
 
-### 8.2 Re-join
+### 6.2 Re-join
 
 При `StopGame` сервер инвалидирует все токены. Клиент должен:
 
@@ -363,7 +256,7 @@ Log file: `logs_dir/player_name.log`.
 
 **Правило:** Все три клиента реализуют re-join. Go и C# проверяют строки ошибок (`registration is closed`, `game stopped`, `match is full`) для graceful exit.
 
-### 8.3 WebSocket ping/pong
+### 6.3 WebSocket ping/pong
 
 - Сервер отправляет `websocket.PingMessage` каждые 25 секунд.
 - Go-клиент: `conn.SetPingHandler()` → `conn.WriteMessage(websocket.PongMessage, ...)`.
@@ -372,9 +265,9 @@ Log file: `logs_dir/player_name.log`.
 
 **Правило:** Без pong-ответов сервер закроет соединение.
 
-## 9. Тестирование
+## 7. Тестирование
 
-### 9.1 Python
+### 7.1 Python
 
 ```bash
 cd twclients/python && uv run pytest tests/ -v
@@ -385,7 +278,7 @@ cd twclients/python && uv run pytest tests/ -v
 - `test_models.py` — serialization/deserialization (Point, Cell, PublicPlayer, Observation, Action, ActionMessage, JoinResponse, Event).
 - `test_strategy.py` — SimpleStrategy (empty cells, attack, expand, fortify, pass, defensive fallback).
 
-### 9.2 C#
+### 7.2 C#
 
 ```bash
 cd twclients/csharp && dotnet test
@@ -394,36 +287,36 @@ cd twclients/csharp && dotnet test
 Тесты:
 - `Tests/StrategyTests.cs` — Decide returns valid action type, handles empty cells, attack/expand/fortify/pass, defensive fallback, energy constraints.
 
-### 9.3 Go
+### 7.3 Go
 
 Go-клиент не имеет отдельных тестов. Стратегия `SimpleStrategy` тестируется косвенно через серверные интеграционные тесты.
 
 **Правило:** Любое изменение стратегии должно сопровождаться тестами.
 
-## 10. Кроссплатформенный запуск
+## 8. Кроссплатформенный запуск
 
-### 10.1 Общие скрипты
+### 8.1 Общие скрипты
 
 - `run.sh` / `run.cmd` — запуск сервера + ботов + всех клиентов.
 - `--no-go` / `--no-python` / `--no-csharp` — пропуск конкретных клиентов.
 - `--no-bots` — сервер без ботов.
 - `--force-start` — старт игры после регистрации.
 
-### 10.2 Windows (run.cmd)
+### 8.2 Windows (run.cmd)
 
 Все клиенты запускаются через `start "Name" /I cmd.exe /c "cd /d dir && command"`.
 
 **Правило:** Все три клиента используют одинаковый паттерн запуска на Windows.
 
-### 10.3 Linux/macOS (run.sh)
+### 8.3 Linux/macOS (run.sh)
 
 - Go: `go run ./cmd/client/ --config config.json --name Name`.
 - Python: `uv run python main.py --config config.json --name Name`.
 - C#: `dotnet run --project . -- --config config.json --name Name`.
 
-## 11. Расхождения между клиентами
+## 9. Расхождения между клиентами
 
-### 11.1 Получение состояния
+### 9.1 Получение состояния
 
 | Клиент | Метод |
 |--------|-------|
@@ -433,7 +326,7 @@ Go-клиент не имеет отдельных тестов. Стратег�
 
 **Правило:** Разные подходы к получению состояния — это фактическая архитектура, а не баг. Каждый клиент реализован по-своему.
 
-### 11.2 Стратегии
+### 9.2 Стратегии
 
 | Клиент | Доступные стратегии |
 |--------|---------------------|
@@ -443,7 +336,7 @@ Go-клиент не имеет отдельных тестов. Стратег�
 
 **Примечание:** Python имеет `AggressiveStrategy`, но Go и C# — только `SimpleStrategy`.
 
-### 11.3 Приоритет действий в SimpleStrategy
+### 9.3 Приоритет действий в SimpleStrategy
 
 | Клиент | Приоритет |
 |--------|-----------|
@@ -453,7 +346,7 @@ Go-клиент не имеет отдельных тестов. Стратег�
 
 **Примечание:** Все три клиента имеют одинаковый приоритет в SimpleStrategy.
 
-## 12. Известные ограничения
+## 10. Известные ограничения
 
 1. Go-клиент не читает WebSocket-события (только отправляет действия).
 2. C#-клиент имеет background read loop, который может накапливать сообщения в очереди.
