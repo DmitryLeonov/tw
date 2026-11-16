@@ -18,9 +18,19 @@ NUM_PYTHON=5
 NUM_CSHARP=5
 NUM_BOTS=10
 
-# Add dotnet to PATH if installed
-if [ -d /opt/dotnet ]; then
-  export PATH="/opt/dotnet:$PATH"
+# Find dotnet executable (Linux / macOS compatible)
+DOTNET_BIN=""
+if command -v dotnet > /dev/null 2>&1; then
+  DOTNET_BIN="$(command -v dotnet)"
+elif [ -f /opt/dotnet/dotnet ]; then
+  DOTNET_BIN="/opt/dotnet/dotnet"
+elif [ -f /usr/local/share/dotnet/dotnet ]; then
+  DOTNET_BIN="/usr/local/share/dotnet/dotnet"
+elif [ -f "$HOME/.dotnet/dotnet" ]; then
+  DOTNET_BIN="$HOME/.dotnet/dotnet"
+fi
+if [ -n "$DOTNET_BIN" ]; then
+  export PATH="$(dirname "$DOTNET_BIN"):$PATH"
 fi
 
 # Add uv to PATH if installed
@@ -47,6 +57,10 @@ declare -a SERVER_PIDS=()
 declare -a GO_PIDS=()
 declare -a PYTHON_PIDS=()
 declare -a CSHARP_PIDS=()
+SERVER_IDX=0
+GO_IDX=0
+PYTHON_IDX=0
+CSHARP_IDX=0
 
 # Parse flags
 for arg in "$@"; do
@@ -65,9 +79,10 @@ echo "=== Starting server ==="
 cd "$SERVER_DIR"
 if [ "$RUN_BOTS" = true ]; then
   nohup "$SERVER_BIN" -config config.json &
-  SERVER_PIDS+=($!)
+  SERVER_PIDS[$SERVER_IDX]=$!
   disown $!
-  echo "Server PID: ${SERVER_PIDS[-1]} (bots enabled)"
+  echo "Server PID: ${SERVER_PIDS[$SERVER_IDX]} (bots enabled)"
+  SERVER_IDX=$((SERVER_IDX + 1))
 else
   # No bots: start server without bots so external clients can join first
   cat > /tmp/server_nobots.json <<EOF
@@ -82,8 +97,10 @@ else
 }
 EOF
   nohup "$SERVER_BIN" -config /tmp/server_nobots.json &
-  SERVER_PIDS+=($!)
-  echo "Server PID: ${SERVER_PIDS[-1]} (no bots — clients play)"
+  SERVER_PIDS[$SERVER_IDX]=$!
+  disown $!
+  echo "Server PID: ${SERVER_PIDS[$SERVER_IDX]} (no bots — clients play)"
+  SERVER_IDX=$((SERVER_IDX + 1))
 fi
 
 # Wait for server to be ready
@@ -101,10 +118,11 @@ if [ "$RUN_GO" = true ]; then
   echo "=== Starting $NUM_GO Go clients ==="
   cd "$CLIENTS_DIR/golang"
   for i in $(seq 1 $NUM_GO); do
-    nohup ./bin/client --name "GoClient$i" --config config.json --log-file "logs/go_client_$i.log" &
-    GO_PIDS+=($!)
+    nohup ./bin/client --name "GoClient$i" --config config.json &
+    GO_PIDS[$GO_IDX]=$!
     disown $!
-    echo "  GoClient$i PID: ${GO_PIDS[-1]}"
+    echo "  GoClient$i PID: ${GO_PIDS[$GO_IDX]}"
+    GO_IDX=$((GO_IDX + 1))
   done
 fi
 
@@ -114,10 +132,11 @@ if [ "$RUN_PYTHON" = true ]; then
   cd "$CLIENTS_DIR/python"
   if [ -n "$UV_BIN" ]; then
     for i in $(seq 1 $NUM_PYTHON); do
-      PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json --log-file "logs/python_client_$i.log" &
-      PYTHON_PIDS+=($!)
+      PATH="$HOME/.local/bin:$PATH" nohup $UV_BIN run python main.py --name "PythonClient$i" --config config.json &
+      PYTHON_PIDS[$PYTHON_IDX]=$!
       disown $!
-      echo "  PythonClient$i PID: ${PYTHON_PIDS[-1]}"
+      echo "  PythonClient$i PID: ${PYTHON_PIDS[$PYTHON_IDX]}"
+      PYTHON_IDX=$((PYTHON_IDX + 1))
     done
   else
     echo "=== Skipping Python clients (uv not found) ==="
@@ -131,15 +150,15 @@ if [ "$RUN_CSHARP" = true ]; then
     sleep 15
     cd "$CLIENTS_DIR/csharp"
     for i in $(seq 1 $NUM_CSHARP); do
-      nohup /opt/dotnet/dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll \
+      nohup "$DOTNET_BIN" exec bin/Release/net10.0/publish/TerritoryWars.Client.dll \
         --config config.json \
         --name "CSharpClient$i" \
         --strategy simple \
-        --log-file "logs/csharp_client_$i.log" \
         &
-      CSHARP_PIDS+=($!)
+      CSHARP_PIDS[$CSHARP_IDX]=$!
       disown $!
-      echo "  CSharpClient$i PID: ${CSHARP_PIDS[-1]}"
+      echo "  CSharpClient$i PID: ${CSHARP_PIDS[$CSHARP_IDX]}"
+      CSHARP_IDX=$((CSHARP_IDX + 1))
     done
   else
     echo "=== Skipping C# clients (binary not found) ==="
@@ -168,7 +187,62 @@ echo "Viewer: http://localhost:8080/viewer"
 echo "Logs:   logs/{server,go_client_*,python_client_*,csharp_client_*}.log"
 echo "Press Ctrl+C to stop all"
 
-# Keep script alive without blocking on child exit
+# Interactive console — sends commands to the server via REST API.
+# Mirrors the built-in console commands: start, stop, pause, resume.
+SERVER_URL="http://localhost:8080"
+
 while true; do
-  sleep 1
+  echo ""
+  echo "=== Server Console ==="
+  echo "  1) start  — start the game"
+  echo "  2) stop   — stop the game"
+  echo "  3) pause  — pause the game"
+  echo "  4) resume — resume the game"
+  echo "  5) state  — show game state"
+  echo "  6) leaderboard — show leaderboard"
+  echo "  q) quit   — stop all processes"
+  echo ""
+  read -r -p "Command [1-6/q]: " cmd
+
+  case "$cmd" in
+    1)
+      echo -n "Starting game... "
+      curl -s -X POST "$SERVER_URL/api/v1/start" && echo " OK" || echo " FAIL"
+      ;;
+    2)
+      echo -n "Stopping game... "
+      curl -s -X POST "$SERVER_URL/api/v1/stop" && echo " OK" || echo " FAIL"
+      ;;
+    3)
+      echo -n "Pausing game... "
+      curl -s -X POST "$SERVER_URL/api/v1/pause" && echo " OK" || echo " FAIL"
+      ;;
+    4)
+      echo -n "Resuming game... "
+      curl -s -X POST "$SERVER_URL/api/v1/resume" && echo " OK" || echo " FAIL"
+      ;;
+    5)
+      curl -s "$SERVER_URL/api/v1/state" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/state"
+      ;;
+    6)
+      curl -s "$SERVER_URL/api/v1/leaderboard" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/leaderboard"
+      ;;
+    q|quit|Q|QUIT)
+      echo "Stopping all processes..."
+      # Stop server
+      curl -s -X POST "$SERVER_URL/api/v1/stop" > /dev/null 2>&1
+      # Kill all client PIDs
+      for pid in "${GO_PIDS[@]}" "${PYTHON_PIDS[@]}" "${CSHARP_PIDS[@]}"; do
+        kill "$pid" 2>/dev/null
+      done
+      for pid in "${SERVER_PIDS[@]}"; do
+        kill "$pid" 2>/dev/null
+      done
+      echo "All processes stopped."
+      exit 0
+      ;;
+    *)
+      echo "Unknown command: $cmd"
+      ;;
+  esac
 done
