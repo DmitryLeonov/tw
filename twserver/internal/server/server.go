@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -107,6 +108,10 @@ func (s *Server) Stop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !isLocalhost(r.RemoteAddr) {
+		http.Error(w, "forbidden — console commands allowed from localhost only", http.StatusForbidden)
+		return
+	}
 	log.Printf("Game stopped via /api/v1/stop — invalidating tokens and disconnecting clients")
 	s.StopGame()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "game stopped"})
@@ -160,6 +165,10 @@ func (s *Server) PauseHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
 		return
 	}
+	if !isLocalhost(r.RemoteAddr) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden — console commands allowed from localhost only"})
+		return
+	}
 	s.Pause()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "game paused"})
 }
@@ -168,6 +177,10 @@ func (s *Server) PauseHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ResumeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+		return
+	}
+	if !isLocalhost(r.RemoteAddr) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden — console commands allowed from localhost only"})
 		return
 	}
 	s.Resume()
@@ -279,6 +292,10 @@ func (s *Server) Join(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Start(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !isLocalhost(r.RemoteAddr) {
+		http.Error(w, "forbidden — console commands allowed from localhost only", http.StatusForbidden)
 		return
 	}
 	if s.StartGame() {
@@ -396,6 +413,18 @@ func bearer(r *http.Request) string {
 		return strings.TrimPrefix(v, "Bearer ")
 	}
 	return ""
+}
+
+// isLocalhost checks if the request comes from localhost/127.0.0.1.
+// Used to restrict console commands (start, stop, pause, resume) to local access only.
+func isLocalhost(remoteAddr string) bool {
+	// remoteAddr can be "IP:port" or just "IP" for some connections.
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// No port — use the whole string.
+		host = remoteAddr
+	}
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
