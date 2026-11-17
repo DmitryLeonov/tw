@@ -40,9 +40,9 @@ go build -o bin/server ./cmd/server/
 ./bin/server -config config.json
 
 # Запуск клиентов в отдельных терминалах
-cd ../twclients/golang && ./bin/client --name GoClient --config config.json
+cd ../twclients/golang && go build -o bin/client ./cmd/client/ && ./bin/client --name GoClient --config config.json
 cd ../twclients/python && uv run python main.py --name PythonClient --config config.json
-cd ../twclients/csharp && dotnet bin/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json
+cd ../twclients/csharp && dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json --strategy simple
 ```
 
 ## Архитектура
@@ -190,9 +190,26 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
+
+## Интерактивная консоль
+
+`run.sh` предоставляет интерактивную консоль после запуска всех процессов:
+
+```
+=== Server Console ===
+  1) start  — запустить игру
+  2) stop   — остановить игру
+  3) pause  — поставить на паузу
+  4) resume — продолжить игру
+  5) state  — показать состояние игры
+  6) leaderboard — показать таблицу лидеров
+  q) quit   — остановить все процессы
+```
+
+Команды отправляются через REST API к серверу.
 
 ## Viewer
 
@@ -274,7 +291,7 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 ## Логи
 
 - Сервер: `logs/server.log` (поле `logs_dir` в `config.json`)
-- Клиенты: stdout (без вывода в файлы)
+- Клиенты: stdout + log file (`logs_dir/player_name.log`)
 
 Чтобы изменить папку логов, установите `logs_dir` в `config.json`:
 ```json

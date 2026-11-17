@@ -42,7 +42,7 @@ func main() {
 	flag.CommandLine.Usage = func() {} // Suppress default usage
 
 	port := env("PORT", "8080")
-	players := intEnv("MAX_PLAYERS", 20)
+	players := intEnv("MAX_PLAYERS", 30)
 	maxTurns := intEnv("MAX_TURNS", 200)
 	turnTimeout := time.Duration(intEnv("TURN_TIMEOUT_SECONDS", 15)) * time.Second
 

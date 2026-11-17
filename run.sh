@@ -92,7 +92,7 @@ else
   "max_turns": 200,
   "width": 40,
   "height": 40,
-  "turn_timeout": "1s",
+  "turn_delay": "1s",
   "bots": { "enabled": false }
 }
 EOF

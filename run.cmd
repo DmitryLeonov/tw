@@ -51,7 +51,7 @@ if "%RUN_BOTS%"=="true" (
     start "TW Server" /D "%SERVER_DIR%" "%SERVER_DIR%\bin\server.exe" -config "%SERVER_DIR%\config.json"
     echo Server started [bots enabled]
 ) else (
-    echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
+    echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_delay": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
     start "TW Server" /D "%SERVER_DIR%" "%SERVER_DIR%\bin\server.exe" -config %TEMP%\server_nobots.json
     echo Server started [no bots — clients play]
 )

@@ -114,7 +114,7 @@ uv run python main.py --server http://localhost:8080 --name "MyBot"
 ```bash
 cd twclients/csharp
 dotnet restore
-dotnet run -- --server http://localhost:8080 --name "MyBot"
+dotnet run -- --server http://localhost:8080 --name "MyBot" --strategy Simple
 ```
 
 Or with a configuration file:
@@ -171,7 +171,7 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
 
@@ -184,9 +184,9 @@ All three clients include the `simple` strategy, which:
 1. **Analyzes territory** — identifies own cells and adjacent neutral/enemy cells
 2. **Evaluates resources** — checks energy level
 3. **Chooses action** by priority:
-   - **Expand** — if there is energy and adjacent neutral cells
-   - **Attack** — if there is energy and adjacent enemy cells
-   - **Fortify** — if there is energy and own cells with low health (≤3)
+   - **Attack** — if there is energy (≥2) and adjacent enemy cells
+   - **Expand** — if there is energy (≥1) and adjacent neutral cells
+   - **Fortify** — if there is energy (≥2) and own cells with low health (≤3)
    - **Pass** — if no valid actions
 
 Note: Only the `simple` strategy is currently implemented across all clients.
@@ -202,7 +202,7 @@ from client.models import Observation, Action
 class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
         # Your algorithm here
-        return Action(type="expand", target={"x": 10, "y": 10})
+        return Action(type="expand", target=Point(x=10, y=10))
 ```
 
 Register in `build_strategy()`:

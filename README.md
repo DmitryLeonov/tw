@@ -40,9 +40,9 @@ go build -o bin/server ./cmd/server/
 ./bin/server -config config.json
 
 # Start clients in separate terminals
-cd ../twclients/golang && ./bin/client --name GoClient --config config.json
+cd ../twclients/golang && go build -o bin/client ./cmd/client/ && ./bin/client --name GoClient --config config.json
 cd ../twclients/python && uv run python main.py --name PythonClient --config config.json
-cd ../twclients/csharp && dotnet bin/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json
+cd ../twclients/csharp && dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json --strategy simple
 ```
 
 ## Architecture
@@ -190,9 +190,26 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
+
+## Interactive Console
+
+`run.sh` provides an interactive console after starting all processes:
+
+```
+=== Server Console ===
+  1) start  — start the game
+  2) stop   — stop the game
+  3) pause  — pause the game
+  4) resume — resume the game
+  5) state  — show game state
+  6) leaderboard — show leaderboard
+  q) quit   — stop all processes
+```
+
+Commands are sent via REST API to the server.
 
 ## Viewer
 
@@ -274,7 +291,7 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 ## Logs
 
 - Server: `logs/server.log` (controlled by `logs_dir` in `config.json`)
-- Clients: stdout (no file output)
+- Clients: stdout + log file (`logs_dir/player_name.log`)
 
 To change log directory, set `logs_dir` in `config.json`:
 ```json
