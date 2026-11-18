@@ -73,7 +73,7 @@ go mod tidy
 go build -o bin/client ./cmd/client/
 
 # Run it
-./client
+./bin/client
 ```
 
 ## Usage
@@ -82,25 +82,25 @@ go build -o bin/client ./cmd/client/
 
 ```bash
 # Use default config (config.json)
-./client
+./bin/client
 
 # Specify server URL
-./client --server http://localhost:8080
+./bin/client --server http://localhost:8080
 
 # Specify player name
-./client --name MyBot
+./bin/client --name MyBot
 
 # Specify config file
-./client --config my-config.json
+./bin/client --config my-config.json
 
 # Set log level
-./client --log-level DEBUG
+./bin/client --log-level DEBUG
 ```
 
 ### All Flags
 
 ```
-./client --help
+./bin/client --help
 
 Flags:
   --config string    Path to config JSON file (default "config.json")
@@ -119,7 +119,9 @@ Edit `config.json`:
   "player_name": "MyAwesomeBot",
   "http_timeout": 10,
   "log_level": "INFO",
-  "strategy": "simple"
+  "logs_dir": "logs",
+  "strategy": "simple",
+  "max_retries": 10
 }
 ```
 
@@ -131,9 +133,11 @@ Edit `config.json`:
 |-------|------|---------|-------------|
 | `server` | string | `http://localhost:8080` | Game server URL |
 | `player_name` | string | `StudentBot` | Display name for your player |
-| `http_timeout` | duration | `10s` | HTTP request timeout |
+| `http_timeout` | int | `10` | HTTP request and WebSocket handshake timeout, in seconds |
 | `log_level` | string | `INFO` | Log level: DEBUG, INFO, WARN, ERROR |
+| `logs_dir` | string | `""` (no file) | Directory for `logs_dir/player_name.log` |
 | `strategy` | string | `simple` | Strategy to use (currently: `simple`) |
+| `max_retries` | int | `10` | Maximum WebSocket reconnects before the client exits |
 
 ### CLI Flag Precedence
 
@@ -141,7 +145,7 @@ Command-line flags override config file values:
 
 ```bash
 # This overrides player_name from config.json
-./client --name OverrideName --log-level DEBUG
+./bin/client --name OverrideName --log-level DEBUG
 ```
 
 ## How to Write Custom Strategies
@@ -286,10 +290,14 @@ Error: observation failed with status 401: unauthorized
 ### Stale Turn Error
 
 ```
-Error: action failed with status 400: stale turn: current turn is 5
+stale turn: current turn is 5
 ```
 
-**Fix**: Your client is too slow. The server has already moved to the next turn. This is normal during high latency. The client will retry on the next observation.
+**Fix**: The server rejected your action because the turn has already advanced.
+Actions are submitted over WebSocket, so this is reported as a WebSocket `ERROR`
+event, not an HTTP status code. The Go client does not act on `ERROR` events — it
+re-reads the state with `GET /api/v1/state` and submits a fresh action for the
+current turn. This is normal under high latency.
 
 ### Strategy Not Found
 
@@ -308,7 +316,7 @@ The client loads the entire game state (all cells) into memory each turn. For a 
 Run with `--log-level DEBUG` for verbose output:
 
 ```bash
-./client --log-level DEBUG
+./bin/client --log-level DEBUG
 ```
 
 This shows every decision, action submission, and turn resolution.

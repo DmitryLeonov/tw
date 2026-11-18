@@ -42,7 +42,7 @@ func main() {
 	flag.CommandLine.Usage = func() {} // Suppress default usage
 
 	port := env("PORT", "8080")
-	players := intEnv("MAX_PLAYERS", 20)
+	players := intEnv("MAX_PLAYERS", 30)
 	maxTurns := intEnv("MAX_TURNS", 200)
 	turnTimeout := time.Duration(intEnv("TURN_TIMEOUT_SECONDS", 15)) * time.Second
 
@@ -84,6 +84,8 @@ func main() {
 		if p := env("PORT", ""); p != "" {
 			cfg.Port = intEnv("PORT", cfg.Port)
 		}
+		// config.json port wins over the built-in default listen port.
+		port = strconv.Itoa(cfg.Port)
 		if mp := env("MAX_PLAYERS", ""); mp != "" {
 			cfg.MaxPlayers = intEnv("MAX_PLAYERS", cfg.MaxPlayers)
 		}

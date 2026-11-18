@@ -83,8 +83,7 @@ func (bm *BotManager) StartBotsOnDemand(count int) error {
 			return fmt.Errorf("failed to register bot %s: %w", agent.Name(), err)
 		}
 
-		outbound := bm.roundManager.Connect(nil, player.ID)
-		_ = outbound
+		bm.roundManager.ConnectBot(player.ID)
 
 		bp := newBotPlayer(agent, player.ID, bm.roundManager, bm.engine, 0, bm.logger, 0, nil)
 		bm.bots = append(bm.bots, bp)

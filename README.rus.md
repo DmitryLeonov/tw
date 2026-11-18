@@ -18,7 +18,7 @@ Territory Wars — многопользовательская игра, где �
 ### Запуск одной командой
 
 ```bash
-# Сервер + 10 ботов + все 15 клиентов (по умолчанию)
+# Сервер + все 15 клиентов, боты заполняют оставшиеся слоты (по умолчанию)
 ./run.sh
 
 # Сервер + все 15 клиентов, без ботов
@@ -31,6 +31,13 @@ Territory Wars — многопользовательская игра, где �
 ./run.sh --force-start
 ```
 
+Перед запуском скрипт собирает Go-сервер и Go-клиента (и C#-клиента через
+`dotnet publish`, если доступен `dotnet`), поэтому устаревшие бинарники не
+запускаются. Если на :8080 всё ещё слушает сервер из предыдущего сеанса,
+скрипт завершится с ошибкой — сначала остановите его
+(`kill -9 $(pgrep -f 'twserver/bin/server')`), поскольку сервер по замыслу
+игнорирует SIGINT/SIGTERM.
+
 ### Ручной запуск
 
 ```bash
@@ -40,9 +47,9 @@ go build -o bin/server ./cmd/server/
 ./bin/server -config config.json
 
 # Запуск клиентов в отдельных терминалах
-cd ../twclients/golang && ./bin/client --name GoClient --config config.json
+cd ../twclients/golang && go build -o bin/client ./cmd/client/ && ./bin/client --name GoClient --config config.json
 cd ../twclients/python && uv run python main.py --name PythonClient --config config.json
-cd ../twclients/csharp && dotnet bin/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json
+cd ../twclients/csharp && dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json --strategy simple
 ```
 
 ## Архитектура
@@ -59,9 +66,8 @@ tw/
 │   ├── config.json           # Конфиг сервера (боты, лимиты, размер карты)
 │   ├── cmd/server/main.go    # Точка входа
 │   ├── internal/
-│   │   ├── server/           # HTTP-хендлеры, WebSocket, Round Manager
-│   │   ├── game/             # Игровой движок (состояние, действия, разрешение)
-│   │   └── config/           # Загрузка конфига
+│   │   ├── server/           # HTTP-хендлеры, WebSocket, Round Manager, загрузка конфига
+│   │   └── game/             # Игровой движок (состояние, действия, разрешение)
 │   └── bin/server            # Собранный бинарник
 └── twclients/                # Внешние клиенты игры
     ├── README.md
@@ -148,7 +154,7 @@ tw/
 ws://localhost:8080/ws?token=ВАШ_ТОКЕН
 ```
 
-События: `CONNECTED`, `OBSERVATION`, `ACTION_ACCEPTED`, `TURN_RESOLVED`, `GAME_OVER`
+События: `CONNECTED`, `OBSERVATION`, `ACTION_ACCEPTED`, `TURN_RESOLVED`, `GAME_OVER`, `ERROR`, `STILL_ALIVE`
 
 Формат действия:
 ```json
@@ -164,13 +170,17 @@ ws://localhost:8080/ws?token=ВАШ_ТОКЕН
 ### С помощью `run.sh`
 
 ```bash
-./run.sh              # Сервер + 10 ботов + все 15 клиентов
+./run.sh              # Сервер + все 15 клиентов (+ боты заполняют остаток)
 ./run.sh --no-bots    # Сервер + 15 клиентов (без ботов)
 ./run.sh --no-go      # Пропустить Go-клиентов
 ./run.sh --no-python  # Пропустить Python-клиентов
 ./run.sh --no-csharp  # Пропустить C#-клиентов
-./run.sh --force-start# Запустить игру после регистрации клиентов
+./run.sh --force-start # Запустить игру после регистрации клиентов
 ```
+
+При старте игры сервер заполняет оставшиеся слоты встроенными ботами:
+`число_ботов = max_players − зарегистрированные_клиенты`. При значении по
+умолчанию `max_players: 30` и 15 клиентах это 15 ботов.
 
 ### Ручной запуск (по 5 копий каждого)
 
@@ -190,9 +200,26 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
+
+## Интерактивная консоль
+
+`run.sh` предоставляет интерактивную консоль после запуска всех процессов:
+
+```
+=== Server Console ===
+  1) start  — запустить игру
+  2) stop   — остановить игру
+  3) pause  — поставить на паузу
+  4) resume — продолжить игру
+  5) state  — показать состояние игры
+  6) leaderboard — показать таблицу лидеров
+  q) quit   — остановить все процессы
+```
+
+Команды отправляются через REST API к серверу.
 
 ## Viewer
 
@@ -274,7 +301,7 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 ## Логи
 
 - Сервер: `logs/server.log` (поле `logs_dir` в `config.json`)
-- Клиенты: stdout (без вывода в файлы)
+- Клиенты: stdout + log file (`logs_dir/player_name.log`)
 
 Чтобы изменить папку логов, установите `logs_dir` в `config.json`:
 ```json

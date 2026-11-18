@@ -142,7 +142,7 @@ twclients/csharp/
 
 Go-клиент использует **HTTP-опрос** для получения состояния и **WebSocket** только для отправки действий.
 
-**Правило:** Go-клиент не читает события из WebSocket (только отправляет действия). Состояние всегда берётся через HTTP.
+**Правило:** Go-клиент получает состояние только через HTTP. Из WebSocket он читает лишь ping (отвечая pong) и событие `GAME_OVER`; игровые события для принятия решений не использует.
 
 1. `Join` → регистрация, получение токена.
 2. `GetObservation` (HTTP) → начальное состояние.
@@ -441,16 +441,28 @@ cd twclients/python && uv run pytest tests/ -v
 
 ### 14.2 C#
 
-```bash
-cd twclients/csharp && dotnet test
-```
-
 Тесты:
-- `Tests/StrategyTests.cs` — Decide returns valid action type, handles empty cells, attack/expand/fortify/pass, defensive fallback, energy constraints.
+- `Tests/StrategyTests.cs` — Decide возвращает допустимый тип действия, пустые клетки, attack/expand/fortify/pass, оборонительный режим, ограничения по энергии.
+
+**Ограничение:** тестового проекта нет — файлы `Tests/**` исключены из сборки
+(`<Compile Remove="Tests\**" />`), пакет тестового фреймворка не подключён.
+Команда `dotnet test` не выполняет ничего. Чтобы тесты начали выполняться, нужен
+отдельный проект с xUnit.
+
+```bash
+cd twclients/csharp && dotnet build && dotnet run -- --config config.json
+```
 
 ### 14.3 Go
 
-Go-клиент не имеет отдельных тестов. Стратегия `SimpleStrategy` тестируется косвенно через серверные интеграционные тесты.
+Go-клиент имеет тесты загрузки конфигурации: `internal/config/config_test.go`
+(значения по умолчанию, разбор `http_timeout`/`max_retries`, подмена ненулевых значений).
+Стратегия `SimpleStrategy` отдельных тестов не имеет и тестируется косвенно через
+серверные интеграционные тесты.
+
+```bash
+cd twclients/golang && go test ./...
+```
 
 **Правило:** Любое изменение стратегии должно сопровождаться тестами.
 
@@ -536,7 +548,7 @@ Python, C# и Go клиенты должны иметь одинаковую ф�
 
 ## 19. Известные ограничения
 
-1. Go-клиент не читает WebSocket-события (только отправляет действия).
+1. Go-клиент читает из WebSocket только ping/pong и `GAME_OVER`; игровые события (`OBSERVATION`, `TURN_RESOLVED`) для логики не используются — состояние берётся из HTTP.
 2. C#-клиент имеет background read loop, который может накапливать сообщения в очереди.
 3. Python-клиент использует `websockets` библиотеку с `ping_interval=20`, что отличается от серверных 25 секунд.
 4. C#-клиент использует `CamelCase` для JSON-сериализации (через `JsonNamingPolicy.CamelCase`), но сервер ожидает `snake_case`. Это работает, потому что C#-клиент отправляет `ActionMessage` с `CamelCase`, а сервер парсит его без учёта регистра.

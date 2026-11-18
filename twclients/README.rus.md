@@ -114,7 +114,7 @@ uv run python main.py --server http://localhost:8080 --name "MyBot"
 ```bash
 cd twclients/csharp
 dotnet restore
-dotnet run -- --server http://localhost:8080 --name "MyBot"
+dotnet run -- --server http://localhost:8080 --name "MyBot" --strategy Simple
 ```
 
 Или с конфигурационным файлом:
@@ -130,20 +130,23 @@ dotnet run -- --config config.json
 cd twclients/golang
 go mod tidy
 go build -o bin/client ./cmd/client/
-./client --name MyBot --config config.json
+./bin/client --name MyBot --config config.json
 ```
 
 Или с аргументами командной строки:
 ```bash
-./client --server http://localhost:8080 --name "MyBot" --log-level DEBUG
+./bin/client --server http://localhost:8080 --name "MyBot" --log-level DEBUG
 ```
 
 ## Запуск всех клиентов
 
 ### Скрипт `run.sh`
 
+Запускайте его из корня репозитория (`run.sh` / `run.cmd` лежат там, а не в
+`twclients/`):
+
 ```bash
-# Запустить сервер + все 15 клиентов + 10 ботов (по умолчанию)
+# Запустить сервер + все 15 клиентов (по умолчанию)
 ./run.sh
 
 # Запустить сервер + 15 клиентов (без ботов)
@@ -152,6 +155,10 @@ go build -o bin/client ./cmd/client/
 # Пропустить конкретный язык
 ./run.sh --no-go --no-python
 ```
+
+При старте игры сервер сам заполняет свободные слоты встроенными ботами:
+`число_ботов = max_players − зарегистрированные_клиенты`. При значениях по
+умолчанию (`max_players: 30`) и 15 клиентах это 15 ботов.
 
 ### Запуск 5 копий каждого клиента
 
@@ -171,7 +178,7 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
 
@@ -184,12 +191,17 @@ done
 1. **Анализирует территорию** — определяет свои клетки и соседние нейтральные/вражеские
 2. **Оценивает ресурсы** — проверяет уровень энергии
 3. **Выбирает действие** по приоритету:
-   - **Expand** — если есть энергия и соседние нейтральные клетки
-   - **Attack** — если есть энергия и соседние вражеские клетки
-   - **Fortify** — если есть энергия и свои клетки с низким здоровьем (≤3)
+   - **Attack** — если есть энергия (≥2) и соседние вражеские клетки
+   - **Expand** — если есть энергия (≥1) и соседние нейтральные клетки
+   - **Fortify** — если есть энергия (≥2) и свои клетки с низким здоровьем (≤3)
    - **Pass** — если нет допустимых действий
 
-Примечание: Только стратегия `simple` реализована во всех клиентах.
+   Оборонительный режим: когда здоровье слабойшей своей клетки ≤ 3, все три клиента
+   пропускают ветку attack и используют **fortify → expand → pass**.
+
+Примечание: в Python-клиенте есть также стратегия `aggressive` — вариант с атакой
+приоритетом и без оборонительного режима. В Go- и C#-клиентах реализована только
+`simple`.
 
 ## Как написать собственную стратегию
 
@@ -202,7 +214,7 @@ from client.models import Observation, Action
 class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
         # Ваш алгоритм здесь
-        return Action(type="expand", target={"x": 10, "y": 10})
+        return Action(type="expand", target=Point(x=10, y=10))
 ```
 
 Зарегистрируйте в `build_strategy()`:
@@ -351,7 +363,7 @@ dotnet run -- --server http://localhost:8080 --name "CSBot"
 
 # Терминал 4: Go клиент
 cd twclients/golang
-./client --server http://localhost:8080 --name "GoBot"
+./bin/client --server http://localhost:8080 --name "GoBot"
 ```
 
 Все три клиента должны зарегистрироваться, получать состояние игры, отправлять действия и дождаться завершения матча.
@@ -362,7 +374,6 @@ cd twclients/golang
 twclients/
 ├── README.md                    # English version
 ├── README.rus.md                # Русская версия (этот файл)
-├── run.sh                       # Скрипт запуска сервера + клиентов
 ├── python/
 │   ├── README.md
 │   ├── pyproject.toml
@@ -383,6 +394,7 @@ twclients/
 │   ├── TerritoryWars.Client.csproj
 │   ├── config.json
 │   ├── Program.cs
+│   ├── Logger.cs
 │   ├── Models/
 │   │   ├── Observation.cs
 │   │   ├── Cell.cs

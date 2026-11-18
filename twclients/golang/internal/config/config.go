@@ -4,19 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 )
 
 // Config holds the client configuration loaded from a JSON file or
 // overridden via command-line flags.
 type Config struct {
-	Server      string        `json:"server"`
-	PlayerName  string        `json:"player_name"`
-	HTTPTimeout time.Duration `json:"http_timeout"`
-	LogLevel    string        `json:"log_level"`
-	LogsDir     string        `json:"logs_dir"`
-	Strategy    string        `json:"strategy"`
-	MaxRetries  int           `json:"max_retries"`
+	Server      string `json:"server"`
+	PlayerName  string `json:"player_name"`
+	HTTPTimeout int    `json:"http_timeout"` // seconds
+	LogLevel    string `json:"log_level"`
+	LogsDir     string `json:"logs_dir"`
+	Strategy    string `json:"strategy"`
+	MaxRetries  int    `json:"max_retries"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -24,7 +23,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Server:      "http://localhost:8080",
 		PlayerName:  "StudentBot",
-		HTTPTimeout: 10 * time.Second,
+		HTTPTimeout: 10,
 		LogLevel:    "INFO",
 		Strategy:    "simple",
 		MaxRetries:  10,
@@ -55,7 +54,7 @@ func Load(path string) (*Config, error) {
 	if cfg.PlayerName == "" {
 		cfg.PlayerName = DefaultConfig().PlayerName
 	}
-	if cfg.HTTPTimeout == 0 {
+	if cfg.HTTPTimeout <= 0 {
 		cfg.HTTPTimeout = DefaultConfig().HTTPTimeout
 	}
 	if cfg.LogLevel == "" {
@@ -63,6 +62,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Strategy == "" {
 		cfg.Strategy = DefaultConfig().Strategy
+	}
+	if cfg.MaxRetries <= 0 {
+		cfg.MaxRetries = DefaultConfig().MaxRetries
 	}
 
 	return cfg, nil

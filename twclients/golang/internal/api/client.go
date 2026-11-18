@@ -26,20 +26,33 @@ type Client struct {
 	wsURL      string
 	playerName string
 	logger     *slog.Logger
+	timeout    time.Duration
 }
 
 // New creates a Client ready to interact with the server.
 // baseURL is the full server URL (e.g. "http://localhost:8080").
 // token is the authentication token obtained from Join.
 func New(baseURL, token string) *Client {
+	const defaultTimeout = 10 * time.Second
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: defaultTimeout,
 		},
-		token:  token,
-		logger: slog.Default(),
+		token:   token,
+		logger:  slog.Default(),
+		timeout: defaultTimeout,
 	}
+}
+
+// SetTimeout overrides the HTTP request timeout and the WebSocket handshake
+// timeout. Non-positive values are ignored and the current timeout is kept.
+func (c *Client) SetTimeout(timeout time.Duration) {
+	if timeout <= 0 {
+		return
+	}
+	c.timeout = timeout
+	c.httpClient.Timeout = timeout
 }
 
 // NewWithLogger creates a Client with a custom logger.
@@ -216,7 +229,7 @@ func (c *Client) ConnectWebSocket(ctx context.Context) (*websocket.Conn, error) 
 	c.logger.Info("WebSocket URL", "url", wsFullURL)
 
 	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
+		HandshakeTimeout: c.timeout,
 	}
 
 	conn, _, err := dialer.DialContext(ctx, wsFullURL, nil)

@@ -37,7 +37,7 @@ type Engine struct {
 
 func NewEngine(cfg Config) *Engine {
 	if cfg.MaxPlayers < 2 {
-		cfg.MaxPlayers = 20
+		cfg.MaxPlayers = 30
 	}
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 200

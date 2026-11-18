@@ -114,7 +114,7 @@ uv run python main.py --server http://localhost:8080 --name "MyBot"
 ```bash
 cd twclients/csharp
 dotnet restore
-dotnet run -- --server http://localhost:8080 --name "MyBot"
+dotnet run -- --server http://localhost:8080 --name "MyBot" --strategy Simple
 ```
 
 Or with a configuration file:
@@ -130,20 +130,22 @@ dotnet run -- --config config.json
 cd twclients/golang
 go mod tidy
 go build -o bin/client ./cmd/client/
-./client --name MyBot --config config.json
+./bin/client --name MyBot --config config.json
 ```
 
 Or with command-line arguments:
 ```bash
-./client --server http://localhost:8080 --name "MyBot" --log-level DEBUG
+./bin/client --server http://localhost:8080 --name "MyBot" --log-level DEBUG
 ```
 
 ## Running All Clients
 
 ### `run.sh` Script
 
+Run it from the repository root (`run.sh` / `run.cmd` live there, not in `twclients/`):
+
 ```bash
-# Start server + all 15 clients + 10 bots (default)
+# Start server + all 15 clients (default)
 ./run.sh
 
 # Start server + 15 clients (no bots)
@@ -152,6 +154,10 @@ Or with command-line arguments:
 # Skip a specific language
 ./run.sh --no-go --no-python
 ```
+
+When the game starts, the server fills the remaining slots with built-in bots:
+`bot_count = max_players − registered_clients`. With the default
+`max_players: 30` and 15 clients, that is 15 bots.
 
 ### Running 5 Copies of Each Client
 
@@ -171,7 +177,7 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
 
@@ -184,12 +190,16 @@ All three clients include the `simple` strategy, which:
 1. **Analyzes territory** — identifies own cells and adjacent neutral/enemy cells
 2. **Evaluates resources** — checks energy level
 3. **Chooses action** by priority:
-   - **Expand** — if there is energy and adjacent neutral cells
-   - **Attack** — if there is energy and adjacent enemy cells
-   - **Fortify** — if there is energy and own cells with low health (≤3)
+   - **Attack** — if there is energy (≥2) and adjacent enemy cells
+   - **Expand** — if there is energy (≥1) and adjacent neutral cells
+   - **Fortify** — if there is energy (≥2) and own cells with low health (≤3)
    - **Pass** — if no valid actions
 
-Note: Only the `simple` strategy is currently implemented across all clients.
+   Defensive mode: when the weakest owned cell has health ≤ 3, all three clients
+   skip the attack branch and use **fortify → expand → pass** instead.
+
+Note: the Python client also ships `aggressive` — an attack-first variant with no
+defensive mode. The Go and C# clients implement `simple` only.
 
 ## How to Write Your Own Strategy
 
@@ -202,7 +212,7 @@ from client.models import Observation, Action
 class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
         # Your algorithm here
-        return Action(type="expand", target={"x": 10, "y": 10})
+        return Action(type="expand", target=Point(x=10, y=10))
 ```
 
 Register in `build_strategy()`:
@@ -351,7 +361,7 @@ dotnet run -- --server http://localhost:8080 --name "CSBot"
 
 # Terminal 4: Go client
 cd twclients/golang
-./client --server http://localhost:8080 --name "GoBot"
+./bin/client --server http://localhost:8080 --name "GoBot"
 ```
 
 All three clients should register, receive game state, send actions, and wait for the match to end.
@@ -362,7 +372,6 @@ All three clients should register, receive game state, send actions, and wait fo
 twclients/
 ├── README.md                    # English version
 ├── README.rus.md                # Russian version
-├── run.sh                       # Server + clients launch script
 ├── python/
 │   ├── README.md
 │   ├── pyproject.toml
@@ -383,6 +392,7 @@ twclients/
 │   ├── TerritoryWars.Client.csproj
 │   ├── config.json
 │   ├── Program.cs
+│   ├── Logger.cs
 │   ├── Models/
 │   │   ├── Observation.cs
 │   │   ├── Cell.cs

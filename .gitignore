@@ -2,8 +2,11 @@
 bin/
 **/bin/
 **/bin
-**/client
-**/server
+twserver/server
+twserver/cmd/server/server
+twclients/golang/client
+twclients/golang/cmd/client/client
+*.exe
 
 # Build artifacts
 **/obj/

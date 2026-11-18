@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Launch server + 5 Go + 5 Python + 5 C# clients + 10 bots.
+# Launch server + 5 Go + 5 Python + 5 C# clients. The server fills the
+# remaining player slots with built-in bots (max_players - registered clients).
 #
 # Usage:
-#   ./run.sh              # server + 10 bots + all 15 clients (default)
+#   ./run.sh              # server + all 15 clients (+ bots fill the rest)
 #   ./run.sh --no-go      # skip Go clients
 #   ./run.sh --no-python  # skip Python clients
 #   ./run.sh --no-csharp  # skip C# clients
@@ -16,7 +17,6 @@ CLIENTS_DIR="$SCRIPT_DIR/twclients"
 NUM_GO=5
 NUM_PYTHON=5
 NUM_CSHARP=5
-NUM_BOTS=10
 
 # Find dotnet executable (Linux / macOS compatible)
 DOTNET_BIN=""
@@ -74,6 +74,34 @@ for arg in "$@"; do
   esac
 done
 
+# Refuse to run if a server from a previous session is still listening:
+# the server ignores SIGINT/SIGTERM by design, so Ctrl+C elsewhere won't stop it,
+# and a second instance would silently fail to bind while run.sh drives the old one.
+if curl -s -m 2 http://localhost:8080/health > /dev/null 2>&1; then
+  echo "ERROR: a server is already listening on :8080 (likely from a previous run)."
+  echo "Stop it first:   kill -9 \$(pgrep -f 'twserver/bin/server')"
+  exit 1
+fi
+
+# Build Go binaries so we never launch a stale server/client.
+if ! command -v go > /dev/null 2>&1; then
+  echo "ERROR: 'go' not found in PATH."
+  exit 1
+fi
+echo "=== Building server ==="
+cd "$SERVER_DIR" && go build -o bin/server ./cmd/server || { echo "ERROR: server build failed"; exit 1; }
+if [ "$RUN_GO" = true ]; then
+  echo "=== Building Go client ==="
+  cd "$CLIENTS_DIR/golang" && go build -o bin/client ./cmd/client || { echo "ERROR: Go client build failed"; exit 1; }
+fi
+
+# Build the C# client if dotnet is available (run.sh launches the published DLL).
+if [ "$RUN_CSHARP" = true ] && [ -n "$DOTNET_BIN" ]; then
+  echo "=== Building C# client ==="
+  cd "$CLIENTS_DIR/csharp"
+  "$DOTNET_BIN" publish -c Release > /dev/null 2>&1 || echo "WARNING: C# build failed, C# clients will be skipped"
+fi
+
 # Start server
 echo "=== Starting server ==="
 cd "$SERVER_DIR"
@@ -92,7 +120,7 @@ else
   "max_turns": 200,
   "width": 40,
   "height": 40,
-  "turn_timeout": "1s",
+  "turn_delay": "1s",
   "bots": { "enabled": false }
 }
 EOF
@@ -105,13 +133,18 @@ fi
 
 # Wait for server to be ready
 echo "Waiting for server to be ready..."
+READY=false
 for i in $(seq 1 20); do
-  if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+  if curl -s -m 2 http://localhost:8080/health > /dev/null 2>&1; then
     echo "Server is ready"
+    READY=true
     break
   fi
   sleep 0.5
 done
+if [ "$READY" != true ]; then
+  echo "WARNING: server did not answer /health within 10s — it may have failed to start or bind the port."
+fi
 
 # Start external clients
 if [ "$RUN_GO" = true ]; then
@@ -170,7 +203,7 @@ if [ "$RUN_FORCE_START" = true ]; then
   echo "=== Waiting for clients to register (15s) ==="
   sleep 15
   echo "=== Starting game manually ==="
-  curl -s -X POST http://localhost:8080/api/v1/start && echo "" || true
+  curl -s -m 5 -X POST http://localhost:8080/api/v1/start && echo "" || true
 fi
 
 echo ""
@@ -180,11 +213,13 @@ echo "Server:        PID ${SERVER_PIDS[0]}"
 [ ${#PYTHON_PIDS[@]} -gt 0 ]  && echo "Python clients: ${#PYTHON_PIDS[@]} instances (PIDs: ${PYTHON_PIDS[*]})"
 [ ${#CSHARP_PIDS[@]} -gt 0 ]  && echo "C# clients:    ${#CSHARP_PIDS[@]} instances (PIDs: ${CSHARP_PIDS[*]})"
 if [ "$RUN_BOTS" = true ]; then
-  echo "Bots:          $NUM_BOTS enabled"
+  echo "Bots:          server fills the remaining slots (max_players - registered clients)"
+else
+  echo "Bots:          disabled (--no-bots)"
 fi
 echo ""
 echo "Viewer: http://localhost:8080/viewer"
-echo "Logs:   logs/{server,go_client_*,python_client_*,csharp_client_*}.log"
+echo "Logs:   twserver/logs/server.log, twclients/{golang,python,csharp}/logs/<client_name>.log"
 echo "Press Ctrl+C to stop all"
 
 # Interactive console — sends commands to the server via REST API.
@@ -207,36 +242,41 @@ while true; do
   case "$cmd" in
     1)
       echo -n "Starting game... "
-      curl -s -X POST "$SERVER_URL/api/v1/start" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/start" && echo " OK" || echo " FAIL"
       ;;
     2)
       echo -n "Stopping game... "
-      curl -s -X POST "$SERVER_URL/api/v1/stop" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/stop" && echo " OK" || echo " FAIL"
       ;;
     3)
       echo -n "Pausing game... "
-      curl -s -X POST "$SERVER_URL/api/v1/pause" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/pause" && echo " OK" || echo " FAIL"
       ;;
     4)
       echo -n "Resuming game... "
-      curl -s -X POST "$SERVER_URL/api/v1/resume" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/resume" && echo " OK" || echo " FAIL"
       ;;
     5)
-      curl -s "$SERVER_URL/api/v1/state" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/state"
+      curl -s -m 10 "$SERVER_URL/api/v1/state" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s -m 10 "$SERVER_URL/api/v1/state"
       ;;
     6)
-      curl -s "$SERVER_URL/api/v1/leaderboard" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/leaderboard"
+      curl -s -m 10 "$SERVER_URL/api/v1/leaderboard" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s -m 10 "$SERVER_URL/api/v1/leaderboard"
       ;;
     q|quit|Q|QUIT)
       echo "Stopping all processes..."
       # Stop server
-      curl -s -X POST "$SERVER_URL/api/v1/stop" > /dev/null 2>&1
+      curl -s -m 5 -X POST "$SERVER_URL/api/v1/stop" > /dev/null 2>&1
       # Kill all client PIDs
       for pid in "${GO_PIDS[@]}" "${PYTHON_PIDS[@]}" "${CSHARP_PIDS[@]}"; do
         kill "$pid" 2>/dev/null
       done
       for pid in "${SERVER_PIDS[@]}"; do
         kill "$pid" 2>/dev/null
+      done
+      # The server ignores SIGTERM by design; make sure it is really gone.
+      sleep 1
+      for pid in "${SERVER_PIDS[@]}"; do
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
       done
       echo "All processes stopped."
       exit 0

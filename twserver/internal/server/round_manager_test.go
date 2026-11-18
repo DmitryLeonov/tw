@@ -11,11 +11,11 @@ import (
 func newTestRoundManager(t *testing.T) (*RoundManager, *game.Engine) {
 	t.Helper()
 	engine := game.NewEngine(game.Config{
-		MaxPlayers:  4,
-		MaxTurns:    10,
-		TurnDelay: 500 * time.Millisecond,
-		Width:       20,
-		Height:      20,
+		MaxPlayers: 4,
+		MaxTurns:   10,
+		TurnDelay:  500 * time.Millisecond,
+		Width:      20,
+		Height:     20,
 	})
 	return NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }()), engine
 }
@@ -135,11 +135,11 @@ func TestSubmitAction_SendsEvent(t *testing.T) {
 
 func TestSubmitAction_GameOver(t *testing.T) {
 	engine := game.NewEngine(game.Config{
-		MaxPlayers:  2,
-		MaxTurns:    1,
-		TurnDelay: 500 * time.Millisecond,
-		Width:       20,
-		Height:      20,
+		MaxPlayers: 2,
+		MaxTurns:   1,
+		TurnDelay:  500 * time.Millisecond,
+		Width:      20,
+		Height:     20,
 	})
 	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
 	defer rm.Shutdown()
@@ -216,6 +216,125 @@ func TestSubmitAction_GameOver(t *testing.T) {
 	}
 	if !hasGameOver2 {
 		t.Error("player 2: expected GAME_OVER event")
+	}
+}
+
+// --- Forced stop (console stop/quit, API /api/v1/stop) ---
+
+// Regression test: Stop()+Restart() (the StopGame cycle behind "stop")
+// used to crash the process with "close of closed channel" when the new
+// run() closed the ready channel that the previous loop had already closed.
+func TestRestart_ReadyChannelNoDoubleClose(t *testing.T) {
+	rm, engine := newTestRoundManager(t)
+	defer rm.Shutdown()
+
+	engine.Join("Alice")
+	rm.Connect(nil, "p01")
+	time.Sleep(100 * time.Millisecond)
+
+	// Two full stop/restart cycles, mirroring repeated stop/start games.
+	for i := 0; i < 2; i++ {
+		rm.Stop()
+		rm.Restart()
+
+		select {
+		case <-rm.Ready():
+			// The new loop re-signaled readiness (fresh channel).
+		case <-time.After(3 * time.Second):
+			t.Fatalf("cycle %d: ready not closed after Restart", i+1)
+		}
+	}
+}
+
+// Regression test: a forced stop must not invoke the game over handler.
+// Previously the ctx.Done branch called broadcastGameOver, whose handler
+// blocks on console input in production — so Stop()/Shutdown() hung in
+// wg.Wait() forever (same deadlock as the Enter-to-stop flow).
+func TestStop_ForcedDoesNotInvokeGameOverHandler(t *testing.T) {
+	rm, engine := newTestRoundManager(t)
+
+	handlerCalled := make(chan struct{})
+	// Production-like handler: it waits for user input (blocks) before the
+	// server calls StopGame. An empty handler would return instantly and
+	// hide the deadlock.
+	rm.SetGameOverHandler(func() {
+		close(handlerCalled)
+		select {} // block forever, like bufio.Scanner waiting for Enter
+	})
+
+	engine.Join("Alice")
+	rm.Connect(nil, "p01")
+
+	// Give the loop a turn to start processing.
+	time.Sleep(100 * time.Millisecond)
+
+	stopped := make(chan struct{})
+	go func() {
+		rm.Stop() // console "stop" / API stop path
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		// OK
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop() deadlocked on a forced shutdown")
+	}
+
+	select {
+	case <-handlerCalled:
+		t.Error("game over handler must not run on a forced stop")
+	default:
+	}
+
+	// The round manager must be usable again (StopGame calls Restart).
+	rm.Restart()
+	defer rm.Shutdown()
+}
+
+// --- Game over handler ---
+
+// Regression test: the game over handler is invoked from the run() goroutine
+// and may itself call Stop() (like the server's StopGame does after waiting
+// for Enter). It must run on its own goroutine, otherwise run() waits for
+// wg.Wait() of itself and the server hangs on "Stopping server...".
+func TestGameOverHandler_CanStopWithoutDeadlock(t *testing.T) {
+	engine := game.NewEngine(game.Config{
+		MaxPlayers: 2,
+		MaxTurns:   1,
+		TurnDelay:  500 * time.Millisecond,
+		Width:      20,
+		Height:     20,
+	})
+	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
+	defer rm.Shutdown()
+
+	stopped := make(chan struct{})
+	rm.SetGameOverHandler(func() {
+		rm.Stop() // blocks forever if the handler runs on the run() goroutine
+		close(stopped)
+	})
+
+	engine.Join("Alice")
+	engine.Join("Bob")
+
+	outbound1 := rm.Connect(nil, "p01")
+	outbound2 := rm.Connect(nil, "p02")
+	for len(outbound1) > 0 {
+		<-outbound1
+	}
+	for len(outbound2) > 0 {
+		<-outbound2
+	}
+
+	rm.SubmitAction("p01", game.ActionMessage{Type: "ACTION", Turn: 0, Actions: []game.Action{{Type: "pass"}}}, outbound1)
+	rm.SubmitAction("p02", game.ActionMessage{Type: "ACTION", Turn: 0, Actions: []game.Action{{Type: "pass"}}}, outbound2)
+
+	select {
+	case <-stopped:
+		// OK: handler completed, no deadlock.
+	case <-time.After(5 * time.Second):
+		t.Fatal("gameOverHandler deadlocked with the run() event loop")
 	}
 }
 

@@ -1,6 +1,6 @@
 # Territory Wars Python Client
 
-Python-клиент для игрового сервера [Territory Wars](https://github.com/example/territory-wars). Регистрация, наблюдение за состоянием игры и отправка действий через WebSocket.
+Python-клиент для игрового сервера [Territory Wars](../../README.rus.md). Регистрация, наблюдение за состоянием игры и отправка действий через WebSocket.
 
 ## Назначение
 
@@ -28,7 +28,7 @@ main.py
   │                       Action, ActionMessage, JoinResponse, Event
   │
   ├── client/strategy.py IGameStrategy (ABC), SimpleStrategy,
-  │                       build_strategy()
+  │                       AggressiveStrategy, build_strategy()
   │
   └── client/game_loop.py GameLoop — оркестратор основного игрового цикла
 ```
@@ -64,6 +64,13 @@ uv sync
 Устанавливает:
 - **httpx** — Асинхронный HTTP-клиент с поддержкой повторных попыток
 - **websockets** — WebSocket-клиент для отправки действий
+- **pytest** (dev-группа) — запуск юнит-тестов из каталога `tests/`
+
+### Запуск тестов
+
+```bash
+uv run pytest tests/ -v
+```
 
 ## Использование
 
@@ -99,14 +106,29 @@ uv run python main.py --config config.json --log-level DEBUG
   "player_name": "StudentBot",
   "http_timeout": 10,
   "log_level": "INFO",
-  "strategy": "simple"
+  "strategy": "simple",
+  "max_retries": 10,
+  "logs_dir": "logs"
 }
 ```
 
-Доступные стратегии:
-- **`simple`** — сначала expand, затем attack, затем fortify, затем pass
+| Ключ | По умолчанию | Описание |
+|------|--------------|----------|
+| `server` | `http://localhost:8080` | Базовый URL сервера |
+| `player_name` | `StudentBot` | Имя игрока для регистрации |
+| `http_timeout` | `10` | Таймаут HTTP-запроса в секундах |
+| `log_level` | `INFO` | DEBUG, INFO, WARNING, ERROR |
+| `strategy` | `simple` | Название стратегии (см. ниже) |
+| `max_retries` | `10` | Максимум переподключений WebSocket перед завершением |
+| `logs_dir` | `""` (без файла) | Каталог для `logs_dir/имя_игрока.log` |
 
-Примечание: Только стратегия `simple` реализована во всех клиентах.
+Вывод идёт в stdout и, если задан `logs_dir`, в `logs_dir/<имя_игрока>.log`.
+
+Доступные стратегии:
+- **`simple`** — оборонительный режим при здоровье слабойшей своей клетки ≤ 3 (fortify → expand → pass); иначе attack (стоит 2) → expand (стоит 1) → fortify (стоит 2) → pass
+- **`aggressive`** — всегда атакует (стоит 2) при наличии соседнего противника, затем expand, затем fortify, затем pass; оборонительного режима нет
+
+Примечание: в Python есть обе стратегии `simple` и `aggressive`; в Go- и C#-клиентах реализована только `simple`.
 
 ## Как написать собственную стратегию
 
@@ -114,22 +136,23 @@ uv run python main.py --config config.json --log-level DEBUG
 
 ```python
 from client.strategy import IGameStrategy
-from client.models import Action, Observation
+from client.models import Action, Observation, Point
 
 class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
-        # Пример: всегда expand в первую доступную нейтральную клетку
+        # Пример: expand в первую соседнюю нейтральную клетку
         owned = observation.get_owned_cells()
         for cell in owned:
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                nx, ny = cell.x + dx, cell.y + dy
-                if observation.is_valid_coord(nx, ny):
-                    target_cell = next(
-                        (c for c in observation.cells if c.x == nx and c.y == ny),
-                        None,
-                    )
-                    if target_cell and target_cell.owner == "":
-                        return Action(type="expand", target=type('P', (), {'x': nx, 'y': ny})())
+                # Карта тороидальная — координаты заворачиваются.
+                nx = (cell.x + dx) % observation.width
+                ny = (cell.y + dy) % observation.height
+                target_cell = next(
+                    (c for c in observation.cells if c.x == nx and c.y == ny),
+                    None,
+                )
+                if target_cell and target_cell.owner == "" and observation.energy >= 1:
+                    return Action(type="expand", target=Point(x=nx, y=ny))
         return Action(type="pass")
 ```
 
@@ -140,14 +163,20 @@ class MyStrategy(IGameStrategy):
 def build_strategy(name: str) -> IGameStrategy:
     strategies = {
         "simple": SimpleStrategy,
+        "aggressive": AggressiveStrategy,
         "my_strategy": MyStrategy,
     }
-    return strategies[name]()
+    cls = strategies.get(name.lower())
+    if cls is None:
+        raise ValueError(f"Unknown strategy: {name}. Available: {list(strategies.keys())}")
+    return cls()
 ```
 
-Или используйте напрямую в коде:
+Или используйте напрямую в коде (`GameLoop.run()` — корутина, её нужно дождаться):
 
 ```python
+import asyncio
+
 from client.api import GameApiClient
 from client.game_loop import GameLoop
 from client.strategy import IGameStrategy
@@ -157,9 +186,16 @@ class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
         return Action(type="pass")  # заглушка
 
-api = GameApiClient("http://localhost:8080", "your-token")
-loop = GameLoop(api, MyStrategy())
-loop.run()
+async def main() -> None:
+    join = GameApiClient.register("http://localhost:8080", "MyBot")
+    api = GameApiClient(base_url="http://localhost:8080", token=join.token)
+    loop = GameLoop(api_client=api, strategy=MyStrategy(), max_retries=10)
+    try:
+        await loop.run()
+    finally:
+        await api.close()
+
+asyncio.run(main())
 ```
 
 ## Справочник API
@@ -167,17 +203,21 @@ loop.run()
 ### GameApiClient
 
 ```python
-# Регистрация (статический метод)
+# Регистрация (статический метод, синхронный HTTP)
 join = GameApiClient.register("http://localhost:8080", "MyBot")
 
-# Методы экземпляра
+# Создание экземпляра
 client = GameApiClient(base_url="http://localhost:8080", token=join.token)
-obs = client.get_observation()          # GET /api/v1/state
-data = client.get_leaderboard()         # GET /api/v1/leaderboard
-client.connect()                        # WebSocket подключение
-client.submit_action(action_message)    # Отправка через WebSocket
-event = client.receive_event()          # Получение из WebSocket
-client.close()                          # Очистка
+
+# Синхронные HTTP-методы (httpx.Client)
+obs = client.get_observation()             # GET /api/v1/state
+data = client.get_leaderboard()            # GET /api/v1/leaderboard
+
+# Корутины (WebSocket) — их нужно дождаться
+await client.connect()                     # открыть WebSocket
+await client.submit_action(action_message) # отправить ActionMessage
+event = await client.receive_event()       # одно событие (таймаут по умолчанию 30 с)
+await client.close()                       # закрыть WebSocket + HTTP-клиент
 ```
 
 ### Модель Observation
@@ -202,7 +242,7 @@ msg = ActionMessage(
     turn=obs.turn,
     actions=[Action(type="expand", target=Point(x=10, y=20))],
 )
-client.submit_action(msg)
+await client.submit_action(msg)
 ```
 
 ## Диагностика
@@ -226,7 +266,9 @@ go build -o bin/server ./cmd/server/
 Unauthorized: token invalid or expired
 ```
 
-**Решение:** Перерегистрируйтесь. Токены одноразовые на подключение.
+**Решение:** Получите новый токен через `POST /api/v1/join`. Токен остаётся
+действительным при переподключении WebSocket, но `POST /api/v1/stop` инвалидирует
+все токены — после этого всем клиентам нужно заново зарегистрироваться.
 
 ### Action Rejected
 
@@ -250,7 +292,7 @@ Timeout waiting for event
 Unknown strategy: foo
 ```
 
-**Решение:** Используйте `simple`, или добавьте свою стратегию в `build_strategy()`.
+**Решение:** Используйте `simple` или `aggressive`, или добавьте свою стратегию в `build_strategy()`.
 
 ## Структура файлов
 

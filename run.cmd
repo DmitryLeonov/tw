@@ -1,8 +1,9 @@
 @echo off
-REM Launch server + 5 Go + 5 Python + 5 C# clients + 10 bots.
+REM Launch server + 5 Go + 5 Python + 5 C# clients. The server fills the
+REM remaining player slots with built-in bots (max_players - registered clients).
 REM
 REM Usage:
-REM   run.cmd              ^| server + 10 bots + all 15 clients (default)
+REM   run.cmd              ^| server + all 15 clients (+ bots fill the rest)
 REM   run.cmd --no-go      ^| skip Go clients
 REM   run.cmd --no-python  ^| skip Python clients
 REM   run.cmd --no-csharp  ^| skip C# clients
@@ -21,7 +22,7 @@ if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 set NUM_GO=5
 set NUM_PYTHON=5
 set NUM_CSHARP=5
-set NUM_BOTS=10
+REM Bots: the server fills the remaining slots (max_players - registered clients)
 
 set RUN_BOTS=true
 set RUN_GO=true
@@ -40,10 +41,35 @@ if "%*" neq "" (
     )
 )
 
+REM Refuse to run if a server from a previous session is still listening:
+REM the Go server ignores SIGINT/SIGTERM, so closing its window's Ctrl+C won't stop it.
+curl -s -m 2 http://localhost:8080/health >nul 2>&1 && (
+    echo ERROR: a server is already listening on :8080 [likely from a previous run].
+    echo Stop it first:  taskkill /f /im server.exe
+    exit /b 1
+)
+
 REM Build server
 echo === Building server ===
 cd /d "%SERVER_DIR%"
 go build -o bin\server.exe .\cmd\server
+if errorlevel 1 (echo ERROR: server build failed & exit /b 1)
+
+REM Build Go client
+if "%RUN_GO%"=="true" (
+    echo === Building Go client ===
+    cd /d "%CLIENTS_DIR%\golang"
+    go build -o bin\client.exe .\cmd\client
+    if errorlevel 1 (echo ERROR: Go client build failed & exit /b 1)
+)
+
+REM Build C# client
+if "%RUN_CSHARP%"=="true" (
+    echo === Building C# client ===
+    cd /d "%CLIENTS_DIR%\csharp"
+    dotnet publish -c Release >nul 2>&1
+    if errorlevel 1 echo WARNING: C# build failed, C# clients will be skipped
+)
 
 REM Start server
 echo === Starting server ===
@@ -51,7 +77,7 @@ if "%RUN_BOTS%"=="true" (
     start "TW Server" /D "%SERVER_DIR%" "%SERVER_DIR%\bin\server.exe" -config "%SERVER_DIR%\config.json"
     echo Server started [bots enabled]
 ) else (
-    echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_timeout": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
+    echo { "port": 8080, "max_players": 30, "max_turns": 200, "width": 40, "height": 40, "turn_delay": "1s", "bots": { "enabled": false } } > %TEMP%\server_nobots.json
     start "TW Server" /D "%SERVER_DIR%" "%SERVER_DIR%\bin\server.exe" -config %TEMP%\server_nobots.json
     echo Server started [no bots — clients play]
 )
@@ -59,7 +85,7 @@ if "%RUN_BOTS%"=="true" (
 REM Wait for server
 echo Waiting for server to be ready...
 for /l %%i in (1,1,20) do (
-    curl -s http://localhost:8080/health >nul 2>&1 && echo Server is ready && goto :start_clients
+    curl -s -m 2 http://localhost:8080/health >nul 2>&1 && echo Server is ready && goto :start_clients
     timeout /t 1 /nobreak >nul
 )
 echo Server may not be ready
@@ -98,7 +124,7 @@ if "%RUN_FORCE_START%"=="true" (
     echo === Waiting for clients to register [15s] ===
     timeout /t 15 /nobreak >nul
     echo === Starting game manually ===
-    curl -s -X POST http://localhost:8080/api/v1/start
+    curl -s -m 10 -X POST http://localhost:8080/api/v1/start
     echo.
 )
 
@@ -107,7 +133,7 @@ if "%RUN_BOTS%"=="false" (
     echo === Waiting for clients to register [15s] ===
     timeout /t 15 /nobreak >nul
     echo === Starting game manually ===
-    curl -s -X POST http://localhost:8080/api/v1/start
+    curl -s -m 10 -X POST http://localhost:8080/api/v1/start
     echo.
 )
 
@@ -117,10 +143,10 @@ echo Server:        started
 echo Go clients:    %NUM_GO% instances
 echo Python clients: %NUM_PYTHON% instances
 echo C# clients:    %NUM_CSHARP% instances
-if "%RUN_BOTS%"=="true" echo Bots:          %NUM_BOTS% enabled
+if "%RUN_BOTS%"=="true" (echo Bots:          server fills the remaining slots) else (echo Bots:          disabled --no-bots)
 echo.
 echo Viewer: http://localhost:8080/viewer
-echo Logs:   %LOGS_DIR%\{server,go_client_*,python_client_*,csharp_client_*}.log
+echo Logs:   twserver\logs\server.log, twclients\{golang,python,csharp}\logs\<client_name>.log
 echo Press Ctrl+C to stop
 
 REM Keep script alive

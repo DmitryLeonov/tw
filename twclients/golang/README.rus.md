@@ -73,7 +73,7 @@ go mod tidy
 go build -o bin/client ./cmd/client/
 
 # Запустите его
-./client
+./bin/client
 ```
 
 ## Использование
@@ -82,25 +82,25 @@ go build -o bin/client ./cmd/client/
 
 ```bash
 # Использовать конфиг по умолчанию (config.json)
-./client
+./bin/client
 
 # Указать URL сервера
-./client --server http://localhost:8080
+./bin/client --server http://localhost:8080
 
 # Указать имя игрока
-./client --name MyBot
+./bin/client --name MyBot
 
 # Указать файл конфига
-./client --config my-config.json
+./bin/client --config my-config.json
 
 # Установить уровень логирования
-./client --log-level DEBUG
+./bin/client --log-level DEBUG
 ```
 
 ### Все флаги
 
 ```
-./client --help
+./bin/client --help
 
 Flags:
   --config string    Путь к JSON-файлу конфига (default "config.json")
@@ -119,7 +119,9 @@ Flags:
   "player_name": "MyAwesomeBot",
   "http_timeout": 10,
   "log_level": "INFO",
-  "strategy": "simple"
+  "logs_dir": "logs",
+  "strategy": "simple",
+  "max_retries": 10
 }
 ```
 
@@ -131,9 +133,11 @@ Flags:
 |------|-----|--------------|----------|
 | `server` | string | `http://localhost:8080` | URL игрового сервера |
 | `player_name` | string | `StudentBot` | Отображаемое имя игрока |
-| `http_timeout` | duration | `10s` | Таймаут HTTP-запроса |
+| `http_timeout` | int | `10` | Таймаут HTTP-запроса и WebSocket-хендшейка в секундах |
 | `log_level` | string | `INFO` | Уровень логирования: DEBUG, INFO, WARN, ERROR |
+| `logs_dir` | string | `""` (без файла) | Каталог для `logs_dir/имя_игрока.log` |
 | `strategy` | string | `simple` | Используемая стратегия (сейчас: `simple`) |
+| `max_retries` | int | `10` | Максимум переподключений WebSocket перед завершением клиента |
 
 ### Приоритет CLI-флагов
 
@@ -141,7 +145,7 @@ Flags:
 
 ```bash
 # Это переопределит player_name из config.json
-./client --name OverrideName --log-level DEBUG
+./bin/client --name OverrideName --log-level DEBUG
 ```
 
 ## Как написать собственную стратегию
@@ -287,10 +291,14 @@ Error: observation failed with status 401: unauthorized
 ### Stale Turn Error
 
 ```
-Error: action failed with status 400: stale turn: current turn is 5
+stale turn: current turn is 5
 ```
 
-**Решение:** Ваш клиент слишком медленный. Сервер уже перешёл к следующему ходу. Это нормально при высокой задержке. Клиент повторит попытку при следующем опросе.
+**Решение:** Сервер отклонил действие, потому что ход уже сменился. Действия
+отправляются по WebSocket, поэтому такая ошибка приходит как WebSocket-событие
+`ERROR`, а не как HTTP-код. Go-клиент не реагирует на `ERROR` — он заново читает
+состояние через `GET /api/v1/state` и отправляет новое действие для текущего хода.
+Это нормальная ситуация при высокой задержке.
 
 ### Strategy Not Found
 
@@ -309,7 +317,7 @@ Warning: unknown strategy, falling back to simple
 Запустите с `--log-level DEBUG` для подробного вывода:
 
 ```bash
-./client --log-level DEBUG
+./bin/client --log-level DEBUG
 ```
 
 Это показывает каждое решение, отправку действия и разрешение хода.

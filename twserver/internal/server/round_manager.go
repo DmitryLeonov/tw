@@ -21,6 +21,9 @@ type clientState struct {
 	outbound   chan game.Event
 	generation int64
 	closed     bool
+	// bot marks players that have no WebSocket connection (built-in bots).
+	// Events are not enqueued for them because nobody would drain the queue.
+	bot bool
 }
 
 // RoundManager is the single authoritative coordinator for game rounds.
@@ -48,8 +51,8 @@ type RoundManager struct {
 	clients map[string]*clientState // playerID -> current clientState
 	gen     int64                   // monotonically increasing generation counter
 
-	actionCh       chan playerAction // actions from WS handlers
-	forceTurnCh    chan struct{}     // forces select to check turnSignal after immediate resolve
+	actionCh    chan playerAction // actions from WS handlers
+	forceTurnCh chan struct{}     // forces select to check turnSignal after immediate resolve
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -57,13 +60,14 @@ type RoundManager struct {
 
 	gameStarted chan struct{} // closed when registration delay expires or game is manually started
 	ready       chan struct{} // closed when run() enters the main loop (game is actually processing)
+	readyOnce   sync.Once     // guards close(ready); reset whenever ready is recreated
 
-	paused   bool
-	pauseCh  chan struct{}
-	pauseMu  sync.Mutex
+	paused  bool
+	pauseCh chan struct{}
+	pauseMu sync.Mutex
 
-	resultsDir       string                   // directory for saving results files
-	gameOverHandler  func()                   // called when game ends (max turns) — triggers full server stop
+	resultsDir      string // directory for saving results files
+	gameOverHandler func() // called when game ends (max turns) — triggers full server stop
 }
 
 type playerAction struct {
@@ -106,6 +110,34 @@ func (rm *RoundManager) SetGameOverHandler(h func()) {
 // (its generation is superseded). Returns the outbound event channel
 // that the WS writer goroutine reads from.
 func (rm *RoundManager) Connect(conn *websocket.Conn, playerID string) chan game.Event {
+	ch := rm.register(playerID, conn, false)
+
+	// Send CONNECTED and initial OBSERVATION.
+	rm.enqueue(playerID, game.Event{
+		Type:    "CONNECTED",
+		Message: "connected to Territory Wars",
+	})
+	if observation, err := rm.engine.Observation(playerID); err == nil {
+		rm.enqueue(playerID, game.Event{
+			Type:        "OBSERVATION",
+			Turn:        observation.Turn,
+			Observation: observation,
+		})
+	}
+
+	return ch
+}
+
+// ConnectBot registers a built-in bot player that has no WebSocket connection.
+// Bots submit actions through their per-player action channel and never read
+// events, so nothing is enqueued for them.
+func (rm *RoundManager) ConnectBot(playerID string) {
+	rm.register(playerID, nil, true)
+}
+
+// register performs the shared connection bookkeeping: it invalidates a
+// previous connection for the same player and installs the new client state.
+func (rm *RoundManager) register(playerID string, conn *websocket.Conn, bot bool) chan game.Event {
 	rm.mu.Lock()
 
 	// Invalidate old connection if one exists (reconnect).
@@ -124,21 +156,9 @@ func (rm *RoundManager) Connect(conn *websocket.Conn, playerID string) chan game
 		outbound:   ch,
 		generation: gen,
 		closed:     false,
+		bot:        bot,
 	}
 	rm.mu.Unlock()
-
-	// Send CONNECTED and initial OBSERVATION.
-	rm.enqueue(playerID, game.Event{
-		Type:    "CONNECTED",
-		Message: "connected to Territory Wars",
-	})
-	if observation, err := rm.engine.Observation(playerID); err == nil {
-		rm.enqueue(playerID, game.Event{
-			Type:        "OBSERVATION",
-			Turn:        observation.Turn,
-			Observation: observation,
-		})
-	}
 
 	return ch
 }
@@ -171,8 +191,8 @@ func (rm *RoundManager) enqueue(playerID string, event game.Event) {
 	if cs == nil || cs.closed {
 		return
 	}
-	// Bots have no WebSocket connection — skip enqueueing events.
-	if cs.conn == nil {
+	// Bots never read their outbound queue — skip enqueueing events for them.
+	if cs.bot {
 		return
 	}
 	select {
@@ -230,7 +250,9 @@ func (rm *RoundManager) run() {
 mainLoop:
 
 	// Signal that the main loop has started — game is actually processing now.
-	close(rm.ready)
+	// Must be once-guarded: a second run() (Restart) could otherwise close
+	// an already-closed ready channel and crash the process.
+	rm.readyOnce.Do(func() { close(rm.ready) })
 
 	for {
 		rm.pauseMu.Lock()
@@ -241,7 +263,8 @@ mainLoop:
 			// When paused, only listen for resume or shutdown.
 			select {
 			case <-rm.ctx.Done():
-				rm.broadcastGameOver()
+				// Forced stop (StopGame/Shutdown): tokens are already invalid and
+				// connections are closed by the caller — no game-over broadcast.
 				rm.cleanupAll()
 				return
 			case <-rm.pauseCh:
@@ -252,7 +275,8 @@ mainLoop:
 
 		select {
 		case <-rm.ctx.Done():
-			rm.broadcastGameOver()
+			// Forced stop (StopGame/Shutdown): tokens are already invalid and
+			// connections are closed by the caller — no game-over broadcast.
 			rm.cleanupAll()
 			return
 
@@ -474,8 +498,10 @@ func (rm *RoundManager) broadcastGameOver() {
 	}
 
 	// Call the game over handler (e.g., prompt for Enter to stop).
+	// The handler may block on console input or call back into Stop()/StopGame,
+	// which waits for this very goroutine — so it must run on its own goroutine.
 	if rm.gameOverHandler != nil {
-		rm.gameOverHandler()
+		go rm.gameOverHandler()
 	}
 }
 
@@ -597,6 +623,12 @@ func (rm *RoundManager) Restart() {
 	ctx, cancel := context.WithCancel(context.Background())
 	rm.ctx = ctx
 	rm.cancel = cancel
+	// Fresh ready channel with the Once re-armed: the closing run() must be
+	// able to signal the new loop, and a stale close must never panic.
+	rm.mu.Lock()
+	rm.ready = make(chan struct{})
+	rm.readyOnce = sync.Once{}
+	rm.mu.Unlock()
 	rm.wg.Add(1)
 	go rm.run()
 }
@@ -645,6 +677,7 @@ func (rm *RoundManager) ResetGameStarted() {
 	rm.gameStarted = make(chan struct{})
 	// Recreate ready channel — the old one is already closed.
 	rm.ready = make(chan struct{})
+	rm.readyOnce = sync.Once{}
 }
 
 // SetGameStarted replaces the gameStarted channel.
@@ -664,6 +697,8 @@ func (rm *RoundManager) SetGameStarted(ch chan struct{}) {
 // main processing loop. Used by StartGame() to wait until the game is
 // actually processing before returning success.
 func (rm *RoundManager) Ready() <-chan struct{} {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
 	return rm.ready
 }
 
@@ -675,7 +710,10 @@ func (rm *RoundManager) Reset() {
 	rm.wg.Wait()
 
 	// Recreate ready channel — the old one is already closed.
+	rm.mu.Lock()
 	rm.ready = make(chan struct{})
+	rm.readyOnce = sync.Once{}
+	rm.mu.Unlock()
 
 	// Create a fresh context and restart the run loop.
 	ctx, cancel := context.WithCancel(context.Background())

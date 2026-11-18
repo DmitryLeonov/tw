@@ -18,7 +18,7 @@ Territory Wars is a multiplayer game where players expand their territory on a t
 ### One-command launch
 
 ```bash
-# Server + 10 bots + all 15 clients (default)
+# Server + all 15 clients, bots fill the remaining slots (default)
 ./run.sh
 
 # Server + all 15 clients, no bots
@@ -31,6 +31,13 @@ Territory Wars is a multiplayer game where players expand their territory on a t
 ./run.sh --force-start
 ```
 
+The script builds the Go server and Go client before starting (plus the C#
+client via `dotnet publish` when `dotnet` is available), so it never launches
+stale binaries. If a server from a previous session is still listening on
+:8080, the script exits with an error — stop the old one first
+(`kill -9 $(pgrep -f 'twserver/bin/server')`), since the server ignores
+SIGINT/SIGTERM by design.
+
 ### Manual start
 
 ```bash
@@ -40,9 +47,9 @@ go build -o bin/server ./cmd/server/
 ./bin/server -config config.json
 
 # Start clients in separate terminals
-cd ../twclients/golang && ./bin/client --name GoClient --config config.json
+cd ../twclients/golang && go build -o bin/client ./cmd/client/ && ./bin/client --name GoClient --config config.json
 cd ../twclients/python && uv run python main.py --name PythonClient --config config.json
-cd ../twclients/csharp && dotnet bin/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json
+cd ../twclients/csharp && dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name CSharpClient --config config.json --strategy simple
 ```
 
 ## Architecture
@@ -59,9 +66,8 @@ tw/
 │   ├── config.json           # Server config (bots, limits, map size)
 │   ├── cmd/server/main.go    # Entry point
 │   ├── internal/
-│   │   ├── server/           # HTTP handlers, WebSocket, Round Manager
-│   │   ├── game/             # Game engine (state, actions, resolution)
-│   │   └── config/           # Config loading
+│   │   ├── server/           # HTTP handlers, WebSocket, Round Manager, config loading
+│   │   └── game/             # Game engine (state, actions, resolution)
 │   └── bin/server            # Built binary
 └── twclients/                # External game clients
     ├── README.md
@@ -148,7 +154,7 @@ tw/
 ws://localhost:8080/ws?token=YOUR_TOKEN
 ```
 
-Events: `CONNECTED`, `OBSERVATION`, `ACTION_ACCEPTED`, `TURN_RESOLVED`, `GAME_OVER`
+Events: `CONNECTED`, `OBSERVATION`, `ACTION_ACCEPTED`, `TURN_RESOLVED`, `GAME_OVER`, `ERROR`, `STILL_ALIVE`
 
 Action format:
 ```json
@@ -164,13 +170,17 @@ Action format:
 ### Using `run.sh`
 
 ```bash
-./run.sh              # Server + 10 bots + all 15 clients
+./run.sh              # Server + all 15 clients (+ bots fill the rest)
 ./run.sh --no-bots    # Server + 15 clients (no bots)
 ./run.sh --no-go      # Skip Go clients
 ./run.sh --no-python  # Skip Python clients
 ./run.sh --no-csharp  # Skip C# clients
-./run.sh --force-start# Start game after clients register
+./run.sh --force-start # Start game after clients register
 ```
+
+At game start the server fills the remaining slots with built-in bots:
+`bot_count = max_players − registered_clients`. With the default
+`max_players: 30` and 15 clients, that is 15 bots.
 
 ### Manual (5 copies each)
 
@@ -190,9 +200,26 @@ done
 # C#
 cd twclients/csharp
 for i in 1 2 3 4 5; do
-  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
+
+## Interactive Console
+
+`run.sh` provides an interactive console after starting all processes:
+
+```
+=== Server Console ===
+  1) start  — start the game
+  2) stop   — stop the game
+  3) pause  — pause the game
+  4) resume — resume the game
+  5) state  — show game state
+  6) leaderboard — show leaderboard
+  q) quit   — stop all processes
+```
+
+Commands are sent via REST API to the server.
 
 ## Viewer
 
@@ -274,7 +301,7 @@ func (s *MyStrategy) Decide(obs *models.Observation) *models.Action {
 ## Logs
 
 - Server: `logs/server.log` (controlled by `logs_dir` in `config.json`)
-- Clients: stdout (no file output)
+- Clients: stdout + log file (`logs_dir/player_name.log`)
 
 To change log directory, set `logs_dir` in `config.json`:
 ```json
