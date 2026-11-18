@@ -60,6 +60,7 @@ type RoundManager struct {
 
 	gameStarted chan struct{} // closed when registration delay expires or game is manually started
 	ready       chan struct{} // closed when run() enters the main loop (game is actually processing)
+	readyOnce   sync.Once     // guards close(ready); reset whenever ready is recreated
 
 	paused  bool
 	pauseCh chan struct{}
@@ -249,7 +250,9 @@ func (rm *RoundManager) run() {
 mainLoop:
 
 	// Signal that the main loop has started — game is actually processing now.
-	close(rm.ready)
+	// Must be once-guarded: a second run() (Restart) could otherwise close
+	// an already-closed ready channel and crash the process.
+	rm.readyOnce.Do(func() { close(rm.ready) })
 
 	for {
 		rm.pauseMu.Lock()
@@ -620,6 +623,12 @@ func (rm *RoundManager) Restart() {
 	ctx, cancel := context.WithCancel(context.Background())
 	rm.ctx = ctx
 	rm.cancel = cancel
+	// Fresh ready channel with the Once re-armed: the closing run() must be
+	// able to signal the new loop, and a stale close must never panic.
+	rm.mu.Lock()
+	rm.ready = make(chan struct{})
+	rm.readyOnce = sync.Once{}
+	rm.mu.Unlock()
 	rm.wg.Add(1)
 	go rm.run()
 }
@@ -668,6 +677,7 @@ func (rm *RoundManager) ResetGameStarted() {
 	rm.gameStarted = make(chan struct{})
 	// Recreate ready channel — the old one is already closed.
 	rm.ready = make(chan struct{})
+	rm.readyOnce = sync.Once{}
 }
 
 // SetGameStarted replaces the gameStarted channel.
@@ -687,6 +697,8 @@ func (rm *RoundManager) SetGameStarted(ch chan struct{}) {
 // main processing loop. Used by StartGame() to wait until the game is
 // actually processing before returning success.
 func (rm *RoundManager) Ready() <-chan struct{} {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
 	return rm.ready
 }
 
@@ -698,7 +710,10 @@ func (rm *RoundManager) Reset() {
 	rm.wg.Wait()
 
 	// Recreate ready channel — the old one is already closed.
+	rm.mu.Lock()
 	rm.ready = make(chan struct{})
+	rm.readyOnce = sync.Once{}
+	rm.mu.Unlock()
 
 	// Create a fresh context and restart the run loop.
 	ctx, cancel := context.WithCancel(context.Background())
