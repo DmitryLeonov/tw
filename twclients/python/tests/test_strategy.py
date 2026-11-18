@@ -161,15 +161,36 @@ class TestSimpleStrategy:
         assert action.target.x == 5
         assert action.target.y == 5
 
-    def test_prefers_expand_over_attack(self):
-        """Strategy prefers expand over attack when both are available."""
+    def test_prefers_attack_over_expand(self):
+        """Strategy prefers attack over expand when both are available and the
+        weakest owned cell is healthy (weakest health > 3)."""
         obs = make_observation(
             owned_cells=[{"x": 5, "y": 5, "health": 5, "type": "base"}],
             neutral_cells=[{"x": 6, "y": 5}],
             enemy_cells=[{"x": 4, "y": 5, "health": 3, "type": "normal"}],
         )
         action = self.strategy.decide(obs)
-        assert action.type == "expand"
+        assert action.type == "attack"
+        assert action.target is not None
+        assert action.target.x == 4
+        assert action.target.y == 5
+
+    def test_defensive_mode_prefers_fortify_over_attack(self):
+        """When the weakest owned cell has health <= 3, attack is skipped and
+        the weakest cell is fortified instead."""
+        obs = make_observation(
+            owned_cells=[
+                {"x": 5, "y": 5, "health": 2, "type": "base"},
+                {"x": 5, "y": 4, "health": 5, "type": "normal"},
+            ],
+            neutral_cells=[{"x": 6, "y": 5}],
+            enemy_cells=[{"x": 4, "y": 5, "health": 3, "type": "normal"}],
+        )
+        action = self.strategy.decide(obs)
+        assert action.type == "fortify"
+        assert action.target is not None
+        assert action.target.x == 5
+        assert action.target.y == 5
 
     def test_passes_when_insufficient_energy_for_attack(self):
         """Strategy passes when energy < 2 and no expand possible."""

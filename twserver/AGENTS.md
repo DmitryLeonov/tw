@@ -167,7 +167,8 @@ type PlayerAgent interface {
 3. `BuildBotList(enabled, maxPlayers)` — создаёт агентов с ротацией стратегий и уникальными seed (base=42).
 4. Имена ботов: `Bot-aggressive-1`, `Bot-defensive-2`, `Bot-expansion-3`, `Bot-random-4`, `Bot-simple-5`.
 5. Боты реализуют `PlayerAgent`, а не `IGameStrategy`.
-6. `StrategySimple` определён в `bot_config.go` но не используется в `BuildBotList`.
+6. Стратегии `BotStrategy` (`simple`, `aggressive`, `defensive`, `expansion`, `random`)
+   определены в `bot_config.go` и все участвуют в ротации `BuildBotList`.
 
 ## 7. Конкурентность
 

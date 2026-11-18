@@ -30,13 +30,14 @@ C#-клиент для игрового сервера Territory Wars, реал�
 
 ### Ключевые компоненты
 
-- **Program.cs** — Точка входа. Парсит аргументы CLI, строит конфигурацию, настраивает DI и запускает игровой цикл с обработкой Ctrl+C.
-- **GameLoop.cs** — Основной игровой цикл. Запрашивает наблюдения, делегирует стратегии и отправляет действия.
+- **Program.cs** — Точка входа. Парсит аргументы CLI, строит конфигурацию, регистрирует игрока, подключает WebSocket и запускает игровой цикл с обработкой Ctrl+C.
+- **GameLoop.cs** — Основной игровой цикл. Опрашивает наблюдения по HTTP, делегирует решение стратегии, отправляет действия через WebSocket и ждёт ответ сервера (`ACTION_ACCEPTED` / `ERROR`).
 - **GameApiClient.cs** — HTTP и WebSocket-клиент. Обрабатывает регистрацию, опрос состояния, запросы таблицы лидеров и отправку действий.
+- **Logger.cs** — Двойной вывод: каждая строка журнала идёт в консоль и, если задан `LogsDir`, в `logs_dir/имя_игрока.log`.
 - **IGameStrategy.cs** — Интерфейс стратегии. Определяет, как бот принимает решение о действии каждый ход.
-- **SimpleStrategy.cs** — Реализация стратегии по умолчанию с базовой логикой расширения территории.
+- **SimpleStrategy.cs** — Стратегия по умолчанию: оборонительный режим при здоровье слабойшей клетки ≤ 3 (fortify → expand → pass), иначе attack → expand → fortify → pass.
 - **Models/** — Классы данных, соответствующие JSON-контракту сервера.
-- **Tests/** — Юнит-тесты для логики стратегии.
+- **Tests/** — Юнит-тесты логики стратегии. Исключены из сборки (`<Compile Remove="Tests\**" />` в csproj), тестового проекта нет — `dotnet test` их не выполняет.
 
 ## Установка
 
@@ -53,7 +54,7 @@ dotnet restore
 dotnet publish --configuration Release
 ```
 
-Вывод: `bin/publish/TerritoryWars.Client.dll`
+Вывод: `bin/Release/net10.0/publish/TerritoryWars.Client.dll`
 
 ### Запуск
 
@@ -77,7 +78,7 @@ dotnet run -- --strategy Simple
 # Go-клиенты
 cd /apps/tw/twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./client --name "GoClient$i" &
+  nohup ./bin/client --name "GoClient$i" &
 done
 
 # Python-клиенты
@@ -91,7 +92,7 @@ done
 cd /apps/tw/twclients/csharp
 export PATH="/opt/dotnet:$PATH"
 for i in 1 2 3 4 5; do
-  nohup dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  nohup dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
 
@@ -112,7 +113,8 @@ dotnet run -- --server http://localhost:8080 --name TerritoryBot
   "ServerUrl": "http://game-server.example.com:8080",
   "PlayerName": "MyAwesomeBot",
   "HttpTimeoutSeconds": 15,
-  "LogLevel": "Debug",
+  "MaxRetries": 10,
+  "LogsDir": "logs",
   "Strategy": "Simple"
 }
 ```
@@ -141,16 +143,20 @@ dotnet run -- --config config.json
 | `ServerUrl` | string | Базовый URL игрового сервера | `http://localhost:8080` |
 | `PlayerName` | string | Отображаемое имя вашего бота | `StudentBot` |
 | `HttpTimeoutSeconds` | int | Таймаут HTTP-запроса в секундах | `10` |
-| `LogLevel` | string | Уровень логирования (Debug, Information, Warning, Error) | `Information` |
+| `MaxRetries` | int | Максимум переподключений WebSocket перед завершением | `10` |
+| `LogsDir` | string | Каталог для `LogsDir/PlayerName.log`; пусто — только консоль | `""` |
 | `Strategy` | string | Используемая стратегия (`Simple`) | `Simple` |
+
+Примечание: уровня логирования в C#-клиенте нет — все сообщения пишутся в консоль и в файл журнала.
 
 ### Переменные окружения
 
-Значения конфигурации также можно переопределить через переменные окружения:
+Значения конфигурации также можно переопределить переменными окружения.
+Префикс `Microsoft.Extensions.Configuration` — `TERRITORYWARS_` (одно подчёркивание):
 
 ```bash
-export TERRITORYWARS__SERVERURL="http://localhost:8080"
-export TERRITORYWARS__PLAYERNAME="EnvBot"
+export TERRITORYWARS_SERVERURL="http://localhost:8080"
+export TERRITORYWARS_PLAYERNAME="EnvBot"
 ```
 
 ## Как написать собственную стратегию
@@ -169,8 +175,10 @@ public class MyStrategy : IGameStrategy
 {
     public Action Decide(Observation observation)
     {
-        var owned = observation.GetOwnedCells();
-        if (owned == null || owned.Count == 0)
+        var owned = observation.Cells
+            .Where(c => c.Owner == observation.PlayerId)
+            .ToList();
+        if (owned.Count == 0)
             return new Action { Type = "pass" };
 
         // Expand в нейтральную территорию, затем атака, затем fortify
@@ -212,14 +220,16 @@ IGameStrategy strategy = strategyName.ToLower() switch
 {
     "simple" => new SimpleStrategy(),
     "my_strategy" => new MyStrategy(),
-    _ => new SimpleStrategy() // fallback на simple
+    _ => throw new ArgumentException($"Unknown strategy: {strategyName}. Supported: Simple")
 };
 ```
 
 ### Шаг 3: Запустите со своей стратегией
 
+Ключ switch сопоставляется без учёта регистра, используйте ключ регистрации:
+
 ```bash
-dotnet run -- --strategy MyStrategy
+dotnet run -- --strategy my_strategy
 ```
 
 ## Справочник игровой механики
@@ -306,6 +316,7 @@ twclients/csharp/
 ├── README.rus.md
 ├── config.json
 ├── Program.cs                    # Точка входа
+├── Logger.cs                     # Двойной вывод: консоль + файл журнала
 ├── Api/
 │   └── GameApiClient.cs          # HTTP + WebSocket-клиент
 ├── Game/
@@ -322,6 +333,8 @@ twclients/csharp/
 ├── Strategy/
 │   ├── IGameStrategy.cs          # Интерфейс стратегии
 │   └── SimpleStrategy.cs         # Стратегия по умолчанию
+├── build.sh / build.cmd          # Скрипты сборки
+├── run.sh / run.cmd              # Скрипты запуска
 └── Tests/
-    └── StrategyTests.cs          # Юнит-тесты (исключены из билда)
+    └── StrategyTests.cs          # Юнит-тесты (исключены из билда, тестового проекта нет)
 ```

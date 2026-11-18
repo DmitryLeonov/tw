@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"twclient/internal/api"
 	"twclient/internal/config"
@@ -81,8 +82,10 @@ func main() {
 	defer cancel()
 
 	// Join the game.
-	logger.Info("registering player", "name", cfg.PlayerName)
+	httpTimeout := time.Duration(cfg.HTTPTimeout) * time.Second
+	logger.Info("registering player", "name", cfg.PlayerName, "http_timeout", httpTimeout)
 	joinClient := api.New(cfg.Server, "")
+	joinClient.SetTimeout(httpTimeout)
 	joinResp, err := joinClient.Join(ctx, cfg.PlayerName)
 	if err != nil {
 		logger.Error("failed to join game", "error", err)
@@ -92,6 +95,7 @@ func main() {
 
 	// Create API client with token.
 	client := api.NewWithLogger(cfg.Server, joinResp.Token, logger)
+	client.SetTimeout(httpTimeout)
 	defer client.Close()
 
 	// Create strategy.

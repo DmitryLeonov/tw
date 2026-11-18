@@ -23,7 +23,8 @@ Environment variables override config.json values:
 | `MAX_PLAYERS` | `30` | Maximum registered players |
 | `MAX_TURNS` | `200` | Maximum turns per game |
 
-Note: `TURN_TIMEOUT_SECONDS` is not used — turn delay is configured via `turn_delay` in `config.json`.
+`TURN_TIMEOUT_SECONDS` overrides `turn_delay` from `config.json` (it is an integer
+number of seconds). Without a config file it defaults to 15 seconds.
 
 ## Game Lifecycle
 
@@ -119,7 +120,9 @@ It uses Server-Sent Events (SSE) at `/api/v1/viewer/events` to stream game state
 
 ## Bots
 
-The server auto-generates bots when `bots_enabled` is true in `config.json`. Bots are created with rotating strategies and unique seeds (base=42).
+When `bots_enabled` is true, `POST /api/v1/start` registers bots to fill the free
+slots (`max_players − registered clients`). Bots are created with rotating
+strategies and unique seeds (base=42). Bots never start on server startup.
 
 ```json
 {
@@ -129,6 +132,10 @@ The server auto-generates bots when `bots_enabled` is true in `config.json`. Bot
   "width": 40,
   "height": 40,
   "turn_delay": "1s",
+  "results_dir": "results",
+  "logs_dir": "logs",
+  "mark_rate": 10,
+  "mark_threshold": 5,
   "bots_enabled": true
 }
 ```

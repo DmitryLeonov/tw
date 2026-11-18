@@ -71,7 +71,7 @@ func (l *Loop) Run(ctx context.Context) error {
 			l.logger.Error("failed to connect WebSocket", "error", err)
 			reconnects++
 			if reconnects >= maxReconnects {
-				l.logger.Info("max reconnects reached (%d), stopping", maxReconnects)
+				l.logger.Info("max reconnects reached, stopping", "max_reconnects", maxReconnects)
 				return fmt.Errorf("max reconnects reached")
 			}
 			time.Sleep(2 * time.Second)
@@ -94,7 +94,7 @@ func (l *Loop) Run(ctx context.Context) error {
 
 			reconnects++
 			if reconnects >= maxReconnects {
-				l.logger.Info("max reconnects reached (%d), stopping", maxReconnects)
+				l.logger.Info("max reconnects reached, stopping", "max_reconnects", maxReconnects)
 				return fmt.Errorf("max reconnects reached")
 			}
 			// Continue to reconnect on next iteration.

@@ -61,8 +61,9 @@ var maxRetries = int.Parse(
     configuration["MaxRetries"]
     ?? "10");
 
-var logFilePath = configuration["LogsDir"] != null
-                   ? Path.Combine(configuration["LogsDir"], $"{name}.log")
+var logsDir = configuration["LogsDir"];
+var logFilePath = !string.IsNullOrWhiteSpace(logsDir)
+                   ? Path.Combine(logsDir, $"{name}.log")
                    : (string?)null;
 
 // Initialize dual writer for Console + log file

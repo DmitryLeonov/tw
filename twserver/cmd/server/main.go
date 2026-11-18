@@ -84,6 +84,8 @@ func main() {
 		if p := env("PORT", ""); p != "" {
 			cfg.Port = intEnv("PORT", cfg.Port)
 		}
+		// config.json port wins over the built-in default listen port.
+		port = strconv.Itoa(cfg.Port)
 		if mp := env("MAX_PLAYERS", ""); mp != "" {
 			cfg.MaxPlayers = intEnv("MAX_PLAYERS", cfg.MaxPlayers)
 		}

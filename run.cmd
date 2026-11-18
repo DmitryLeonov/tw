@@ -1,8 +1,9 @@
 @echo off
-REM Launch server + 5 Go + 5 Python + 5 C# clients + 10 bots.
+REM Launch server + 5 Go + 5 Python + 5 C# clients. The server fills the
+REM remaining player slots with built-in bots (max_players - registered clients).
 REM
 REM Usage:
-REM   run.cmd              ^| server + 10 bots + all 15 clients (default)
+REM   run.cmd              ^| server + all 15 clients (+ bots fill the rest)
 REM   run.cmd --no-go      ^| skip Go clients
 REM   run.cmd --no-python  ^| skip Python clients
 REM   run.cmd --no-csharp  ^| skip C# clients
@@ -21,7 +22,7 @@ if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
 set NUM_GO=5
 set NUM_PYTHON=5
 set NUM_CSHARP=5
-set NUM_BOTS=10
+REM Bots: the server fills the remaining slots (max_players - registered clients)
 
 set RUN_BOTS=true
 set RUN_GO=true
@@ -117,10 +118,10 @@ echo Server:        started
 echo Go clients:    %NUM_GO% instances
 echo Python clients: %NUM_PYTHON% instances
 echo C# clients:    %NUM_CSHARP% instances
-if "%RUN_BOTS%"=="true" echo Bots:          %NUM_BOTS% enabled
+if "%RUN_BOTS%"=="true" (echo Bots:          server fills the remaining slots) else (echo Bots:          disabled --no-bots)
 echo.
 echo Viewer: http://localhost:8080/viewer
-echo Logs:   %LOGS_DIR%\{server,go_client_*,python_client_*,csharp_client_*}.log
+echo Logs:   twserver\logs\server.log, twclients\{golang,python,csharp}\logs\<client_name>.log
 echo Press Ctrl+C to stop
 
 REM Keep script alive

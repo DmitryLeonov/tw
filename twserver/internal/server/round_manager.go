@@ -21,6 +21,9 @@ type clientState struct {
 	outbound   chan game.Event
 	generation int64
 	closed     bool
+	// bot marks players that have no WebSocket connection (built-in bots).
+	// Events are not enqueued for them because nobody would drain the queue.
+	bot bool
 }
 
 // RoundManager is the single authoritative coordinator for game rounds.
@@ -48,8 +51,8 @@ type RoundManager struct {
 	clients map[string]*clientState // playerID -> current clientState
 	gen     int64                   // monotonically increasing generation counter
 
-	actionCh       chan playerAction // actions from WS handlers
-	forceTurnCh    chan struct{}     // forces select to check turnSignal after immediate resolve
+	actionCh    chan playerAction // actions from WS handlers
+	forceTurnCh chan struct{}     // forces select to check turnSignal after immediate resolve
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -58,12 +61,12 @@ type RoundManager struct {
 	gameStarted chan struct{} // closed when registration delay expires or game is manually started
 	ready       chan struct{} // closed when run() enters the main loop (game is actually processing)
 
-	paused   bool
-	pauseCh  chan struct{}
-	pauseMu  sync.Mutex
+	paused  bool
+	pauseCh chan struct{}
+	pauseMu sync.Mutex
 
-	resultsDir       string                   // directory for saving results files
-	gameOverHandler  func()                   // called when game ends (max turns) — triggers full server stop
+	resultsDir      string // directory for saving results files
+	gameOverHandler func() // called when game ends (max turns) — triggers full server stop
 }
 
 type playerAction struct {
@@ -106,6 +109,34 @@ func (rm *RoundManager) SetGameOverHandler(h func()) {
 // (its generation is superseded). Returns the outbound event channel
 // that the WS writer goroutine reads from.
 func (rm *RoundManager) Connect(conn *websocket.Conn, playerID string) chan game.Event {
+	ch := rm.register(playerID, conn, false)
+
+	// Send CONNECTED and initial OBSERVATION.
+	rm.enqueue(playerID, game.Event{
+		Type:    "CONNECTED",
+		Message: "connected to Territory Wars",
+	})
+	if observation, err := rm.engine.Observation(playerID); err == nil {
+		rm.enqueue(playerID, game.Event{
+			Type:        "OBSERVATION",
+			Turn:        observation.Turn,
+			Observation: observation,
+		})
+	}
+
+	return ch
+}
+
+// ConnectBot registers a built-in bot player that has no WebSocket connection.
+// Bots submit actions through their per-player action channel and never read
+// events, so nothing is enqueued for them.
+func (rm *RoundManager) ConnectBot(playerID string) {
+	rm.register(playerID, nil, true)
+}
+
+// register performs the shared connection bookkeeping: it invalidates a
+// previous connection for the same player and installs the new client state.
+func (rm *RoundManager) register(playerID string, conn *websocket.Conn, bot bool) chan game.Event {
 	rm.mu.Lock()
 
 	// Invalidate old connection if one exists (reconnect).
@@ -124,21 +155,9 @@ func (rm *RoundManager) Connect(conn *websocket.Conn, playerID string) chan game
 		outbound:   ch,
 		generation: gen,
 		closed:     false,
+		bot:        bot,
 	}
 	rm.mu.Unlock()
-
-	// Send CONNECTED and initial OBSERVATION.
-	rm.enqueue(playerID, game.Event{
-		Type:    "CONNECTED",
-		Message: "connected to Territory Wars",
-	})
-	if observation, err := rm.engine.Observation(playerID); err == nil {
-		rm.enqueue(playerID, game.Event{
-			Type:        "OBSERVATION",
-			Turn:        observation.Turn,
-			Observation: observation,
-		})
-	}
 
 	return ch
 }
@@ -171,8 +190,8 @@ func (rm *RoundManager) enqueue(playerID string, event game.Event) {
 	if cs == nil || cs.closed {
 		return
 	}
-	// Bots have no WebSocket connection — skip enqueueing events.
-	if cs.conn == nil {
+	// Bots never read their outbound queue — skip enqueueing events for them.
+	if cs.bot {
 		return
 	}
 	select {

@@ -1,6 +1,6 @@
 # Territory Wars Python Client
 
-A Python client for the [Territory Wars](https://github.com/example/territory-wars) game server. Register, observe the game state, and submit actions via WebSocket.
+A Python client for the [Territory Wars](../../README.md) game server. Register, observe the game state, and submit actions via WebSocket.
 
 ## Purpose
 
@@ -28,7 +28,7 @@ main.py
   │                       Action, ActionMessage, JoinResponse, Event
   │
   ├── client/strategy.py IGameStrategy (ABC), SimpleStrategy,
-  │                       build_strategy()
+  │                       AggressiveStrategy, build_strategy()
   │
   └── client/game_loop.py GameLoop — main game loop orchestrator
 ```
@@ -65,6 +65,13 @@ uv sync
 This installs:
 - **httpx** — Async-capable HTTP client with retry support
 - **websockets** — WebSocket client for action submission
+- **pytest** (dev group) — runs the unit tests in `tests/`
+
+### Running the Tests
+
+```bash
+uv run pytest tests/ -v
+```
 
 ## Usage
 
@@ -100,14 +107,29 @@ The `config.json` file already contains an example configuration:
   "player_name": "StudentBot",
   "http_timeout": 10,
   "log_level": "INFO",
-  "strategy": "simple"
+  "strategy": "simple",
+  "max_retries": 10,
+  "logs_dir": "logs"
 }
 ```
 
-Available strategies:
-- **`simple`** — Expands first, then attacks, then fortifies weakest cell (health ≤3), then passes
+| Key | Default | Description |
+|-----|---------|-------------|
+| `server` | `http://localhost:8080` | Server base URL |
+| `player_name` | `StudentBot` | Player name for registration |
+| `http_timeout` | `10` | HTTP timeout in seconds |
+| `log_level` | `INFO` | DEBUG, INFO, WARNING, ERROR |
+| `strategy` | `simple` | Strategy name (see below) |
+| `max_retries` | `10` | Maximum WebSocket reconnects before the client exits |
+| `logs_dir` | `""` (no file) | Directory for `logs_dir/player_name.log` |
 
-Note: Only the `simple` strategy is currently implemented across all clients.
+Output goes to stdout and, when `logs_dir` is set, to `logs_dir/<player_name>.log`.
+
+Available strategies:
+- **`simple`** — defensive mode when the weakest owned cell has health ≤ 3 (fortify → expand → pass); otherwise attack (cost 2) → expand (cost 1) → fortify (cost 2) → pass
+- **`aggressive`** — always attack (cost 2) when an adjacent enemy exists, then expand, then fortify, then pass; no defensive mode
+
+Note: Python has both `simple` and `aggressive`; the Go and C# clients implement `simple` only.
 
 ## How to Write Custom Strategies
 
@@ -115,22 +137,23 @@ Subclass `IGameStrategy` and implement the `decide` method:
 
 ```python
 from client.strategy import IGameStrategy
-from client.models import Action, Observation
+from client.models import Action, Observation, Point
 
 class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
-        # Example: always expand into the first available neutral cell
+        # Example: expand into the first adjacent neutral cell
         owned = observation.get_owned_cells()
         for cell in owned:
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                nx, ny = cell.x + dx, cell.y + dy
-                if observation.is_valid_coord(nx, ny):
-                    target_cell = next(
-                        (c for c in observation.cells if c.x == nx and c.y == ny),
-                        None,
-                    )
-                    if target_cell and target_cell.owner == "":
-                        return Action(type="expand", target=type('P', (), {'x': nx, 'y': ny})())
+                # The map is toroidal — wrap coordinates around.
+                nx = (cell.x + dx) % observation.width
+                ny = (cell.y + dy) % observation.height
+                target_cell = next(
+                    (c for c in observation.cells if c.x == nx and c.y == ny),
+                    None,
+                )
+                if target_cell and target_cell.owner == "" and observation.energy >= 1:
+                    return Action(type="expand", target=Point(x=nx, y=ny))
         return Action(type="pass")
 ```
 
@@ -141,14 +164,20 @@ Then register it in `build_strategy()`:
 def build_strategy(name: str) -> IGameStrategy:
     strategies = {
         "simple": SimpleStrategy,
+        "aggressive": AggressiveStrategy,
         "my_strategy": MyStrategy,
     }
-    return strategies[name]()
+    cls = strategies.get(name.lower())
+    if cls is None:
+        raise ValueError(f"Unknown strategy: {name}. Available: {list(strategies.keys())}")
+    return cls()
 ```
 
-Or use it directly in code:
+Or use it directly in code (`GameLoop.run()` is a coroutine, so it must be awaited):
 
 ```python
+import asyncio
+
 from client.api import GameApiClient
 from client.game_loop import GameLoop
 from client.strategy import IGameStrategy
@@ -158,9 +187,16 @@ class MyStrategy(IGameStrategy):
     def decide(self, observation: Observation) -> Action:
         return Action(type="pass")  # placeholder
 
-api = GameApiClient("http://localhost:8080", "your-token")
-loop = GameLoop(api, MyStrategy())
-loop.run()
+async def main() -> None:
+    join = GameApiClient.register("http://localhost:8080", "MyBot")
+    api = GameApiClient(base_url="http://localhost:8080", token=join.token)
+    loop = GameLoop(api_client=api, strategy=MyStrategy(), max_retries=10)
+    try:
+        await loop.run()
+    finally:
+        await api.close()
+
+asyncio.run(main())
 ```
 
 ## API Reference
@@ -168,17 +204,21 @@ loop.run()
 ### GameApiClient
 
 ```python
-# Registration (static method)
+# Registration (static method, synchronous HTTP)
 join = GameApiClient.register("http://localhost:8080", "MyBot")
 
-# Instance methods
+# Instance construction
 client = GameApiClient(base_url="http://localhost:8080", token=join.token)
-obs = client.get_observation()          # GET /api/v1/state
-data = client.get_leaderboard()         # GET /api/v1/leaderboard
-client.connect()                        # WebSocket connect
-client.submit_action(action_message)    # Send via WebSocket
-event = client.receive_event()          # Receive from WebSocket
-client.close()                          # Cleanup
+
+# Synchronous HTTP methods (httpx.Client)
+obs = client.get_observation()             # GET /api/v1/state
+data = client.get_leaderboard()            # GET /api/v1/leaderboard
+
+# Coroutines (WebSocket) — must be awaited
+await client.connect()                     # open the WebSocket
+await client.submit_action(action_message) # send an ActionMessage
+event = await client.receive_event()       # one event (default 30 s timeout)
+await client.close()                       # close WebSocket + HTTP client
 ```
 
 ### Observation Model
@@ -203,7 +243,7 @@ msg = ActionMessage(
     turn=obs.turn,
     actions=[Action(type="expand", target=Point(x=10, y=20))],
 )
-client.submit_action(msg)
+await client.submit_action(msg)
 ```
 
 ## Troubleshooting
@@ -227,7 +267,9 @@ go build -o bin/server ./cmd/server/
 Unauthorized: token invalid or expired
 ```
 
-**Fix**: Re-register. Tokens are single-use per connection.
+**Fix**: Re-register with `POST /api/v1/join` to get a new token. A token stays
+valid across WebSocket reconnects, but `POST /api/v1/stop` invalidates every
+token, so all clients must join again afterwards.
 
 ### Action Rejected
 
@@ -251,7 +293,7 @@ Timeout waiting for event
 Unknown strategy: foo
 ```
 
-**Fix**: Use `simple`, or add your strategy to `build_strategy()`.
+**Fix**: Use `simple` or `aggressive`, or add your strategy to `build_strategy()`.
 
 ## File Structure
 

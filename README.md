@@ -18,7 +18,7 @@ Territory Wars is a multiplayer game where players expand their territory on a t
 ### One-command launch
 
 ```bash
-# Server + 10 bots + all 15 clients (default)
+# Server + all 15 clients, bots fill the remaining slots (default)
 ./run.sh
 
 # Server + all 15 clients, no bots
@@ -59,9 +59,8 @@ tw/
 │   ├── config.json           # Server config (bots, limits, map size)
 │   ├── cmd/server/main.go    # Entry point
 │   ├── internal/
-│   │   ├── server/           # HTTP handlers, WebSocket, Round Manager
-│   │   ├── game/             # Game engine (state, actions, resolution)
-│   │   └── config/           # Config loading
+│   │   ├── server/           # HTTP handlers, WebSocket, Round Manager, config loading
+│   │   └── game/             # Game engine (state, actions, resolution)
 │   └── bin/server            # Built binary
 └── twclients/                # External game clients
     ├── README.md
@@ -148,7 +147,7 @@ tw/
 ws://localhost:8080/ws?token=YOUR_TOKEN
 ```
 
-Events: `CONNECTED`, `OBSERVATION`, `ACTION_ACCEPTED`, `TURN_RESOLVED`, `GAME_OVER`
+Events: `CONNECTED`, `OBSERVATION`, `ACTION_ACCEPTED`, `TURN_RESOLVED`, `GAME_OVER`, `ERROR`, `STILL_ALIVE`
 
 Action format:
 ```json
@@ -164,13 +163,17 @@ Action format:
 ### Using `run.sh`
 
 ```bash
-./run.sh              # Server + 10 bots + all 15 clients
+./run.sh              # Server + all 15 clients (+ bots fill the rest)
 ./run.sh --no-bots    # Server + 15 clients (no bots)
 ./run.sh --no-go      # Skip Go clients
 ./run.sh --no-python  # Skip Python clients
 ./run.sh --no-csharp  # Skip C# clients
-./run.sh --force-start# Start game after clients register
+./run.sh --force-start # Start game after clients register
 ```
+
+At game start the server fills the remaining slots with built-in bots:
+`bot_count = max_players − registered_clients`. With the default
+`max_players: 30` and 15 clients, that is 15 bots.
 
 ### Manual (5 copies each)
 

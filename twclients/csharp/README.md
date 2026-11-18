@@ -31,12 +31,13 @@ This client connects to a Territory Wars game server, receives game state observ
 ### Key Components
 
 - **Program.cs** — Entry point. Parses CLI arguments, loads config, registers the player, connects WebSocket, and starts the game loop with Ctrl+C handling.
-- **GameLoop.cs** — Core game loop. Reads observations from WebSocket, delegates to the strategy, and submits actions.
+- **GameLoop.cs** — Core game loop. Polls observations over HTTP, delegates to the strategy, submits actions over WebSocket, and waits for the server response (`ACTION_ACCEPTED` / `ERROR`).
 - **GameApiClient.cs** — HTTP and WebSocket client. Handles registration, action submission, and WebSocket connection management.
+- **Logger.cs** — Dual writer: every log line goes to the console and, when `LogsDir` is set, to `logs_dir/player_name.log`.
 - **IGameStrategy.cs** — Strategy interface. Defines how a bot decides its action each turn.
-- **SimpleStrategy.cs** — Default strategy: expand → attack → fortify → pass priority.
+- **SimpleStrategy.cs** — Default strategy: defensive mode when the weakest owned cell has health ≤ 3 (fortify → expand → pass), otherwise attack → expand → fortify → pass.
 - **Models/** — Data classes matching the server's JSON API contract.
-- **Tests/** — Unit tests for strategy logic (excluded from the main build).
+- **Tests/** — Unit tests for strategy logic. They are excluded from the build (`<Compile Remove="Tests\**" />` in the csproj) and there is no test project, so `dotnet test` does not run them.
 
 ## Installation
 
@@ -53,7 +54,7 @@ dotnet restore
 dotnet publish --configuration Release
 ```
 
-Output: `bin/publish/TerritoryWars.Client.dll`
+Output: `bin/Release/net10.0/publish/TerritoryWars.Client.dll`
 
 ### Run
 
@@ -77,7 +78,7 @@ dotnet run -- --strategy Simple
 # Go clients
 cd /apps/tw/twclients/golang
 for i in 1 2 3 4 5; do
-  nohup ./client --name "GoClient$i" &
+  nohup ./bin/client --name "GoClient$i" &
 done
 
 # Python clients
@@ -91,7 +92,7 @@ done
 cd /apps/tw/twclients/csharp
 export PATH="/opt/dotnet:$PATH"
 for i in 1 2 3 4 5; do
-  nohup dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" &
+  nohup dotnet exec bin/Release/net10.0/publish/TerritoryWars.Client.dll --name "CSharpClient$i" --strategy simple &
 done
 ```
 
@@ -112,7 +113,8 @@ dotnet run -- --server http://localhost:8080 --name TerritoryBot
   "ServerUrl": "http://game-server.example.com:8080",
   "PlayerName": "MyAwesomeBot",
   "HttpTimeoutSeconds": 15,
-  "LogLevel": "Debug",
+  "MaxRetries": 10,
+  "LogsDir": "logs",
   "Strategy": "Simple"
 }
 ```
@@ -141,16 +143,20 @@ dotnet run -- --config config.json
 | `ServerUrl`          | string  | Game server base URL                 | `http://localhost:8080` |
 | `PlayerName`         | string  | Display name for your bot            | `StudentBot`        |
 | `HttpTimeoutSeconds` | int     | HTTP request timeout in seconds      | `10`                |
-| `LogLevel`           | string  | Logging level (Debug, Information, Warning, Error) | `Information` |
+| `MaxRetries`         | int     | Maximum WebSocket reconnects before the client exits | `10` |
+| `LogsDir`            | string  | Directory for `LogsDir/PlayerName.log`; empty means console only | `""` |
 | `Strategy`           | string  | Strategy to use (`Simple`)           | `Simple`            |
+
+Note: the C# client has no log level setting — every message is written to the console and to the log file.
 
 ### Environment Variables
 
-Configuration values can also be overridden via environment variables:
+Configuration values can also be overridden via environment variables. The
+`Microsoft.Extensions.Configuration` prefix is `TERRITORYWARS_` (one underscore):
 
 ```bash
-export TERRITORYWARS__SERVERURL="http://localhost:8080"
-export TERRITORYWARS__PLAYERNAME="EnvBot"
+export TERRITORYWARS_SERVERURL="http://localhost:8080"
+export TERRITORYWARS_PLAYERNAME="EnvBot"
 ```
 
 ## How to Write Custom Strategies
@@ -169,8 +175,10 @@ public class MyStrategy : IGameStrategy
 {
     public Action Decide(Observation observation)
     {
-        var owned = observation.GetOwnedCells();
-        if (owned == null || owned.Count == 0)
+        var owned = observation.Cells
+            .Where(c => c.Owner == observation.PlayerId)
+            .ToList();
+        if (owned.Count == 0)
             return new Action { Type = "pass" };
 
         // Expand into neutral territory, then attack, then fortify
@@ -212,14 +220,16 @@ IGameStrategy strategy = strategyName.ToLower() switch
 {
     "simple" => new SimpleStrategy(),
     "my_strategy" => new MyStrategy(),
-    _ => new SimpleStrategy() // fallback to simple
+    _ => throw new ArgumentException($"Unknown strategy: {strategyName}. Supported: Simple")
 };
 ```
 
 ### Step 3: Run with Your Strategy
 
+The switch key is matched case-insensitively, so use the registration key:
+
 ```bash
-dotnet run -- --strategy MyStrategy
+dotnet run -- --strategy my_strategy
 ```
 
 ## Game Mechanics Reference
@@ -305,6 +315,7 @@ twclients/csharp/
 ├── README.md
 ├── config.json
 ├── Program.cs                    # Entry point
+├── Logger.cs                     # Dual writer: console + log file
 ├── Api/
 │   └── GameApiClient.cs          # HTTP + WebSocket client
 ├── Game/
@@ -321,6 +332,8 @@ twclients/csharp/
 ├── Strategy/
 │   ├── IGameStrategy.cs          # Strategy interface
 │   └── SimpleStrategy.cs         # Default strategy
+├── build.sh / build.cmd          # Build scripts
+├── run.sh / run.cmd              # Run scripts
 └── Tests/
-    └── StrategyTests.cs          # Unit tests (excluded from build)
+    └── StrategyTests.cs          # Unit tests (excluded from build, no test project)
 ```

@@ -23,7 +23,8 @@ go build -o bin/server ./cmd/server/
 | `MAX_PLAYERS` | `30` | Максимум зарегистрированных игроков |
 | `MAX_TURNS` | `200` | Максимум ходов в игре |
 
-Примечание: `TURN_TIMEOUT_SECONDS` не используется — turn delay настраивается через `turn_delay` в `config.json`.
+`TURN_TIMEOUT_SECONDS` переопределяет `turn_delay` из `config.json` (целое число
+секунд). Без файла конфига значение по умолчанию — 15 секунд.
 
 ## Жизненный цикл игры
 
@@ -117,7 +118,9 @@ http://localhost:8080/viewer
 
 ## Боты
 
-Сервер автоматически создаёт ботов при `bots_enabled: true` в `config.json`. Боты создаются с ротацией стратегий и уникальными seed (base=42).
+При `bots_enabled: true` запрос `POST /api/v1/start` регистрирует ботов, заполняющих
+свободные слоты (`max_players − зарегистрированные клиенты`). Боты создаются с
+ротацией стратегий и уникальными seed (base=42). При старте сервера боты не запускаются.
 
 ```json
 {
@@ -127,6 +130,10 @@ http://localhost:8080/viewer
   "width": 40,
   "height": 40,
   "turn_delay": "1s",
+  "results_dir": "results",
+  "logs_dir": "logs",
+  "mark_rate": 10,
+  "mark_threshold": 5,
   "bots_enabled": true
 }
 ```

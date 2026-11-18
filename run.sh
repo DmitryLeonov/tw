@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Launch server + 5 Go + 5 Python + 5 C# clients + 10 bots.
+# Launch server + 5 Go + 5 Python + 5 C# clients. The server fills the
+# remaining player slots with built-in bots (max_players - registered clients).
 #
 # Usage:
-#   ./run.sh              # server + 10 bots + all 15 clients (default)
+#   ./run.sh              # server + all 15 clients (+ bots fill the rest)
 #   ./run.sh --no-go      # skip Go clients
 #   ./run.sh --no-python  # skip Python clients
 #   ./run.sh --no-csharp  # skip C# clients
@@ -16,7 +17,6 @@ CLIENTS_DIR="$SCRIPT_DIR/twclients"
 NUM_GO=5
 NUM_PYTHON=5
 NUM_CSHARP=5
-NUM_BOTS=10
 
 # Find dotnet executable (Linux / macOS compatible)
 DOTNET_BIN=""
@@ -180,11 +180,13 @@ echo "Server:        PID ${SERVER_PIDS[0]}"
 [ ${#PYTHON_PIDS[@]} -gt 0 ]  && echo "Python clients: ${#PYTHON_PIDS[@]} instances (PIDs: ${PYTHON_PIDS[*]})"
 [ ${#CSHARP_PIDS[@]} -gt 0 ]  && echo "C# clients:    ${#CSHARP_PIDS[@]} instances (PIDs: ${CSHARP_PIDS[*]})"
 if [ "$RUN_BOTS" = true ]; then
-  echo "Bots:          $NUM_BOTS enabled"
+  echo "Bots:          server fills the remaining slots (max_players - registered clients)"
+else
+  echo "Bots:          disabled (--no-bots)"
 fi
 echo ""
 echo "Viewer: http://localhost:8080/viewer"
-echo "Logs:   logs/{server,go_client_*,python_client_*,csharp_client_*}.log"
+echo "Logs:   twserver/logs/server.log, twclients/{golang,python,csharp}/logs/<client_name>.log"
 echo "Press Ctrl+C to stop all"
 
 # Interactive console — sends commands to the server via REST API.
