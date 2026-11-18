@@ -74,6 +74,34 @@ for arg in "$@"; do
   esac
 done
 
+# Refuse to run if a server from a previous session is still listening:
+# the server ignores SIGINT/SIGTERM by design, so Ctrl+C elsewhere won't stop it,
+# and a second instance would silently fail to bind while run.sh drives the old one.
+if curl -s -m 2 http://localhost:8080/health > /dev/null 2>&1; then
+  echo "ERROR: a server is already listening on :8080 (likely from a previous run)."
+  echo "Stop it first:   kill -9 \$(pgrep -f 'twserver/bin/server')"
+  exit 1
+fi
+
+# Build Go binaries so we never launch a stale server/client.
+if ! command -v go > /dev/null 2>&1; then
+  echo "ERROR: 'go' not found in PATH."
+  exit 1
+fi
+echo "=== Building server ==="
+cd "$SERVER_DIR" && go build -o bin/server ./cmd/server || { echo "ERROR: server build failed"; exit 1; }
+if [ "$RUN_GO" = true ]; then
+  echo "=== Building Go client ==="
+  cd "$CLIENTS_DIR/golang" && go build -o bin/client ./cmd/client || { echo "ERROR: Go client build failed"; exit 1; }
+fi
+
+# Build the C# client if dotnet is available (run.sh launches the published DLL).
+if [ "$RUN_CSHARP" = true ] && [ -n "$DOTNET_BIN" ]; then
+  echo "=== Building C# client ==="
+  cd "$CLIENTS_DIR/csharp"
+  "$DOTNET_BIN" publish -c Release > /dev/null 2>&1 || echo "WARNING: C# build failed, C# clients will be skipped"
+fi
+
 # Start server
 echo "=== Starting server ==="
 cd "$SERVER_DIR"
@@ -105,13 +133,18 @@ fi
 
 # Wait for server to be ready
 echo "Waiting for server to be ready..."
+READY=false
 for i in $(seq 1 20); do
-  if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+  if curl -s -m 2 http://localhost:8080/health > /dev/null 2>&1; then
     echo "Server is ready"
+    READY=true
     break
   fi
   sleep 0.5
 done
+if [ "$READY" != true ]; then
+  echo "WARNING: server did not answer /health within 10s — it may have failed to start or bind the port."
+fi
 
 # Start external clients
 if [ "$RUN_GO" = true ]; then
@@ -170,7 +203,7 @@ if [ "$RUN_FORCE_START" = true ]; then
   echo "=== Waiting for clients to register (15s) ==="
   sleep 15
   echo "=== Starting game manually ==="
-  curl -s -X POST http://localhost:8080/api/v1/start && echo "" || true
+  curl -s -m 5 -X POST http://localhost:8080/api/v1/start && echo "" || true
 fi
 
 echo ""
@@ -209,36 +242,41 @@ while true; do
   case "$cmd" in
     1)
       echo -n "Starting game... "
-      curl -s -X POST "$SERVER_URL/api/v1/start" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/start" && echo " OK" || echo " FAIL"
       ;;
     2)
       echo -n "Stopping game... "
-      curl -s -X POST "$SERVER_URL/api/v1/stop" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/stop" && echo " OK" || echo " FAIL"
       ;;
     3)
       echo -n "Pausing game... "
-      curl -s -X POST "$SERVER_URL/api/v1/pause" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/pause" && echo " OK" || echo " FAIL"
       ;;
     4)
       echo -n "Resuming game... "
-      curl -s -X POST "$SERVER_URL/api/v1/resume" && echo " OK" || echo " FAIL"
+      curl -s -m 10 -X POST "$SERVER_URL/api/v1/resume" && echo " OK" || echo " FAIL"
       ;;
     5)
-      curl -s "$SERVER_URL/api/v1/state" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/state"
+      curl -s -m 10 "$SERVER_URL/api/v1/state" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s -m 10 "$SERVER_URL/api/v1/state"
       ;;
     6)
-      curl -s "$SERVER_URL/api/v1/leaderboard" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s "$SERVER_URL/api/v1/leaderboard"
+      curl -s -m 10 "$SERVER_URL/api/v1/leaderboard" 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s -m 10 "$SERVER_URL/api/v1/leaderboard"
       ;;
     q|quit|Q|QUIT)
       echo "Stopping all processes..."
       # Stop server
-      curl -s -X POST "$SERVER_URL/api/v1/stop" > /dev/null 2>&1
+      curl -s -m 5 -X POST "$SERVER_URL/api/v1/stop" > /dev/null 2>&1
       # Kill all client PIDs
       for pid in "${GO_PIDS[@]}" "${PYTHON_PIDS[@]}" "${CSHARP_PIDS[@]}"; do
         kill "$pid" 2>/dev/null
       done
       for pid in "${SERVER_PIDS[@]}"; do
         kill "$pid" 2>/dev/null
+      done
+      # The server ignores SIGTERM by design; make sure it is really gone.
+      sleep 1
+      for pid in "${SERVER_PIDS[@]}"; do
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
       done
       echo "All processes stopped."
       exit 0

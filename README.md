@@ -31,6 +31,13 @@ Territory Wars is a multiplayer game where players expand their territory on a t
 ./run.sh --force-start
 ```
 
+The script builds the Go server and Go client before starting (plus the C#
+client via `dotnet publish` when `dotnet` is available), so it never launches
+stale binaries. If a server from a previous session is still listening on
+:8080, the script exits with an error — stop the old one first
+(`kill -9 $(pgrep -f 'twserver/bin/server')`), since the server ignores
+SIGINT/SIGTERM by design.
+
 ### Manual start
 
 ```bash

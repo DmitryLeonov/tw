@@ -41,10 +41,35 @@ if "%*" neq "" (
     )
 )
 
+REM Refuse to run if a server from a previous session is still listening:
+REM the Go server ignores SIGINT/SIGTERM, so closing its window's Ctrl+C won't stop it.
+curl -s -m 2 http://localhost:8080/health >nul 2>&1 && (
+    echo ERROR: a server is already listening on :8080 [likely from a previous run].
+    echo Stop it first:  taskkill /f /im server.exe
+    exit /b 1
+)
+
 REM Build server
 echo === Building server ===
 cd /d "%SERVER_DIR%"
 go build -o bin\server.exe .\cmd\server
+if errorlevel 1 (echo ERROR: server build failed & exit /b 1)
+
+REM Build Go client
+if "%RUN_GO%"=="true" (
+    echo === Building Go client ===
+    cd /d "%CLIENTS_DIR%\golang"
+    go build -o bin\client.exe .\cmd\client
+    if errorlevel 1 (echo ERROR: Go client build failed & exit /b 1)
+)
+
+REM Build C# client
+if "%RUN_CSHARP%"=="true" (
+    echo === Building C# client ===
+    cd /d "%CLIENTS_DIR%\csharp"
+    dotnet publish -c Release >nul 2>&1
+    if errorlevel 1 echo WARNING: C# build failed, C# clients will be skipped
+)
 
 REM Start server
 echo === Starting server ===
@@ -60,7 +85,7 @@ if "%RUN_BOTS%"=="true" (
 REM Wait for server
 echo Waiting for server to be ready...
 for /l %%i in (1,1,20) do (
-    curl -s http://localhost:8080/health >nul 2>&1 && echo Server is ready && goto :start_clients
+    curl -s -m 2 http://localhost:8080/health >nul 2>&1 && echo Server is ready && goto :start_clients
     timeout /t 1 /nobreak >nul
 )
 echo Server may not be ready
@@ -99,7 +124,7 @@ if "%RUN_FORCE_START%"=="true" (
     echo === Waiting for clients to register [15s] ===
     timeout /t 15 /nobreak >nul
     echo === Starting game manually ===
-    curl -s -X POST http://localhost:8080/api/v1/start
+    curl -s -m 10 -X POST http://localhost:8080/api/v1/start
     echo.
 )
 
@@ -108,7 +133,7 @@ if "%RUN_BOTS%"=="false" (
     echo === Waiting for clients to register [15s] ===
     timeout /t 15 /nobreak >nul
     echo === Starting game manually ===
-    curl -s -X POST http://localhost:8080/api/v1/start
+    curl -s -m 10 -X POST http://localhost:8080/api/v1/start
     echo.
 )
 
