@@ -260,7 +260,8 @@ mainLoop:
 			// When paused, only listen for resume or shutdown.
 			select {
 			case <-rm.ctx.Done():
-				rm.broadcastGameOver()
+				// Forced stop (StopGame/Shutdown): tokens are already invalid and
+				// connections are closed by the caller — no game-over broadcast.
 				rm.cleanupAll()
 				return
 			case <-rm.pauseCh:
@@ -271,7 +272,8 @@ mainLoop:
 
 		select {
 		case <-rm.ctx.Done():
-			rm.broadcastGameOver()
+			// Forced stop (StopGame/Shutdown): tokens are already invalid and
+			// connections are closed by the caller — no game-over broadcast.
 			rm.cleanupAll()
 			return
 
@@ -493,8 +495,10 @@ func (rm *RoundManager) broadcastGameOver() {
 	}
 
 	// Call the game over handler (e.g., prompt for Enter to stop).
+	// The handler may block on console input or call back into Stop()/StopGame,
+	// which waits for this very goroutine — so it must run on its own goroutine.
 	if rm.gameOverHandler != nil {
-		rm.gameOverHandler()
+		go rm.gameOverHandler()
 	}
 }
 

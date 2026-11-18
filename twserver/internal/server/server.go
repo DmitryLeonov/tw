@@ -84,6 +84,12 @@ func NewWithConfig(e *game.Engine, cfg *GameConfig) *Server {
 		fmt.Println("\n=== Game over. Press Enter to stop the server. ===")
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
+		// The game may have already been stopped via the stop API while we
+		// waited for Enter — engine.IsGameOver() is false after Reset().
+		if !s.engine.IsGameOver() {
+			fmt.Println("Game already stopped. Waiting for start.")
+			return
+		}
 		fmt.Println("Stopping server...")
 		s.StopGame()
 		fmt.Println("Server stopped. Waiting for start.")

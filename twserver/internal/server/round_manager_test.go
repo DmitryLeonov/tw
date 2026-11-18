@@ -219,6 +219,52 @@ func TestSubmitAction_GameOver(t *testing.T) {
 	}
 }
 
+// --- Game over handler ---
+
+// Regression test: the game over handler is invoked from the run() goroutine
+// and may itself call Stop() (like the server's StopGame does after waiting
+// for Enter). It must run on its own goroutine, otherwise run() waits for
+// wg.Wait() of itself and the server hangs on "Stopping server...".
+func TestGameOverHandler_CanStopWithoutDeadlock(t *testing.T) {
+	engine := game.NewEngine(game.Config{
+		MaxPlayers: 2,
+		MaxTurns:   1,
+		TurnDelay:  500 * time.Millisecond,
+		Width:      20,
+		Height:     20,
+	})
+	rm := NewRoundManager(engine, func() chan struct{} { c := make(chan struct{}); close(c); return c }())
+	defer rm.Shutdown()
+
+	stopped := make(chan struct{})
+	rm.SetGameOverHandler(func() {
+		rm.Stop() // blocks forever if the handler runs on the run() goroutine
+		close(stopped)
+	})
+
+	engine.Join("Alice")
+	engine.Join("Bob")
+
+	outbound1 := rm.Connect(nil, "p01")
+	outbound2 := rm.Connect(nil, "p02")
+	for len(outbound1) > 0 {
+		<-outbound1
+	}
+	for len(outbound2) > 0 {
+		<-outbound2
+	}
+
+	rm.SubmitAction("p01", game.ActionMessage{Type: "ACTION", Turn: 0, Actions: []game.Action{{Type: "pass"}}}, outbound1)
+	rm.SubmitAction("p02", game.ActionMessage{Type: "ACTION", Turn: 0, Actions: []game.Action{{Type: "pass"}}}, outbound2)
+
+	select {
+	case <-stopped:
+		// OK: handler completed, no deadlock.
+	case <-time.After(5 * time.Second):
+		t.Fatal("gameOverHandler deadlocked with the run() event loop")
+	}
+}
+
 // --- Event ordering ---
 
 func TestSubmitAction_EventOrdering(t *testing.T) {
